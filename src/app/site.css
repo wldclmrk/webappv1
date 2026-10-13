@@ -1,0 +1,41 @@
+/* Additions for the Next.js build (formerly WordPress-specific rules). */
+
+/* Skip link */
+a.sr:focus{position:fixed;left:16px;top:16px;width:auto;height:auto;clip:auto;z-index:100;background:var(--white);padding:10px 14px;border-radius:4px;box-shadow:0 10px 30px rgba(21,22,64,.25)}
+
+/* Utility links */
+.util nav a{display:inline-block}
+
+/* Search result pager uses links rather than buttons */
+.pager a{min-width:44px;min-height:44px;border:1px solid var(--line2);border-radius:4px;background:#fff;font-weight:600;display:inline-grid;place-items:center;color:var(--ink)}
+.pager a[aria-current="page"]{background:var(--blue);color:#fff;border-color:var(--blue)}
+a.chip{text-decoration:none}
+a.chip[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:var(--white)}
+
+/* Editor content inside the Weldclass rich-text containers */
+.rich img{height:auto}
+.rich figure{margin:20px 0}
+.rich .wp-block-image img{border-radius:var(--r2)}
+.rich .aligncenter{margin-left:auto;margin-right:auto;text-align:center}
+.rich .alignleft{float:left;margin:4px 20px 12px 0}
+.rich .alignright{float:right;margin:4px 0 12px 20px}
+.rich .wp-block-buttons{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+.rich .wp-block-button__link{display:inline-flex;align-items:center;min-height:46px;padding:0 22px;border-radius:4px;background:var(--orange);color:var(--navy);font-family:var(--f-display);font-weight:600;font-size:17px;letter-spacing:.08em;text-transform:uppercase}
+.rich .wp-block-table table{border-collapse:collapse;width:100%}
+.rich .wp-block-embed{margin:22px 0}
+.rich .wp-block-embed iframe{width:100%;aspect-ratio:16/9;height:auto;border:0;border-radius:var(--r2)}
+.rich .wp-block-quote{margin:0 0 20px;padding:4px 0 4px 20px;border-left:4px solid var(--orange);font-family:var(--f-display);text-transform:uppercase;color:var(--blue);font-size:21px;line-height:1.25}
+
+
+/* Where to buy: store cards are buttons in the results list */
+.slist .store{cursor:pointer}
+
+/* Header search: one focus ring around the input and button together. */
+.search{border-radius:4px}
+.search input:focus,.search input:focus-visible{outline:none}
+.search input::-webkit-search-cancel-button{cursor:pointer}
+.search:focus-within{box-shadow:0 0 0 3px rgba(85,89,255,.35)}
+.search:focus-within input{border-color:var(--blue2)}
+.search button:focus-visible{outline:none;background:var(--navy)}
+.suggest a:focus-visible{outline:none;background:var(--tint)}
+.raw{display:contents}
