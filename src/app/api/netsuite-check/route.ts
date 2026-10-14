@@ -42,6 +42,23 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
   if (q.get('audit') === 'images') return imageAudit(q.get('format') === 'csv');
 
+  // Transaction check: /api/netsuite-check/?audit=txn&customer=C09120 (tests each portal column on its own)
+  if (q.get('audit') === 'txn') {
+    const num = String(q.get('customer') ?? '').trim();
+    if (!/^[\w-]{1,40}$/.test(num)) return Response.json({ ok: false, error: 'Add &customer= with the customer number, e.g. C09120.' }, { status: 400 });
+    const [cu] = await suiteql<{ id: string; companyname: string }>('SELECT id, companyname FROM customer WHERE UPPER(entityid) = ' + sqlStr(num.toUpperCase()), 1);
+    if (!cu) return Response.json({ ok: false, error: 'No customer with number ' + num });
+    const where = ' FROM transaction t WHERE t.entity = ' + Number(cu.id);
+    const cols = ['t.tranid', 't.trandate', 't.duedate', 't.type', 't.status', 'BUILTIN.DF(t.status) AS status_name', 't.foreigntotal', 't.foreignamountremaining', 't.otherrefnum', "CASE WHEN t.duedate < TRUNC(SYSDATE) THEN 'T' ELSE 'F' END AS overdue"];
+    const checks = [
+      await step('transaction types for this customer', () => suiteql('SELECT t.type, COUNT(*) AS count' + where + ' GROUP BY t.type')),
+    ];
+    for (const type of ['SalesOrd', 'CustInvc', 'CustCred']) {
+      for (const c of cols) checks.push(await step(type + ': ' + c, () => suiteql('SELECT t.id, ' + c + where + ' AND t.type = ' + sqlStr(type) + ' ORDER BY t.id DESC', 2)));
+    }
+    return Response.json({ ok: checks.every((c) => c.ok), customer: cu, checks }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
   // Part number lookup: /api/netsuite-check/?pn=91300AMA1
   const pn = new URL(req.url).searchParams.get('pn')?.trim();
   if (pn) {

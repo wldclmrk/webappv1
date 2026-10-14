@@ -62,7 +62,8 @@ export async function invoices(customer: number, openOnly = false, max = 200): P
 
 export async function orders(customer: number, max = 100): Promise<Txn[]> {
   const rows = await suiteql<Record<string, string>>(
-    'SELECT ' + TXN_COLS + ' FROM transaction t WHERE t.entity = ' + sqlId(customer) + " AND t.type = 'SalesOrd' ORDER BY t.trandate DESC, t.id DESC",
+    // Sales orders have no amount remaining or due date, so they use their own, smaller column set.
+    "SELECT t.id, t.tranid, t.trandate, t.type, BUILTIN.DF(t.status) AS status, t.foreigntotal, t.otherrefnum FROM transaction t WHERE t.entity = " + sqlId(customer) + " AND t.type = 'SalesOrd' ORDER BY t.trandate DESC, t.id DESC",
     max,
   );
   return rows.map(toTxn);
@@ -83,3 +84,4 @@ export async function ownsTransaction(customer: number, id: number): Promise<boo
   const rows = await suiteql('SELECT t.id FROM transaction t WHERE t.id = ' + sqlId(id) + ' AND t.entity = ' + sqlId(customer) + " AND t.type IN ('CustInvc', 'CustCred', 'SalesOrd')", 1);
   return rows.length === 1;
 }
+
