@@ -18,8 +18,11 @@ export async function POST(req: Request) {
   try {
     const ids = await customersForEmail(email);
     if (ids.length) {
-      const link = new URL('/dealer/set-password/?t=' + makeLink(email, await currentHash(email)), req.url).toString();
-      await sendLink(email, link);
+      const path = '/dealer/set-password/?t=' + makeLink(email, await currentHash(email));
+      // Preview sites without email set up: go straight to the set-password page so testing doesn't need the logs.
+      // Previews are private to your Vercel team (Deployment Protection), and this never happens on Production.
+      if (process.env.VERCEL_ENV === 'preview' && !process.env.RESEND_API_KEY) return go(req, path);
+      await sendLink(email, new URL(path, req.url).toString());
     }
   } catch (e) {
     console.error('Dealer password link failed', (e as Error).message, (e as { body?: string }).body ?? '');
