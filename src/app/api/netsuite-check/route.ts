@@ -1,4 +1,4 @@
-import { NetSuiteError, accessToken, netsuiteConfigured, productSource, suiteql } from '@/lib/netsuite';
+import { NetSuiteError, accessToken, netsuiteConfigured, productSource, sqlStr, suiteql } from '@/lib/netsuite';
 
 /**
  * Connection check for the NetSuite Sandbox: /api/netsuite-check/
@@ -24,7 +24,7 @@ function trim(row: Record<string, unknown>) {
 
 const WEB = "custitemshowproductonweb = 'T' AND isinactive = 'F'";
 
-export async function GET() {
+export async function GET(req: Request) {
   if (process.env.VERCEL_ENV === 'production') return new Response('Not found', { status: 404 });
   if (!netsuiteConfigured()) {
     return Response.json({
@@ -36,6 +36,21 @@ export async function GET() {
   }
   const auth = await step('token', async () => ((await accessToken()) ? 'Signed in to NetSuite' : 'No token'));
   if (!auth.ok) return Response.json({ ok: false, productSource: productSource(), account: process.env.NETSUITE_ACCOUNT_ID, checks: [auth] }, { status: 502 });
+
+  // Part number lookup: /api/netsuite-check/?pn=91300AMA1
+  const pn = new URL(req.url).searchParams.get('pn')?.trim();
+  if (pn) {
+    if (!/^[\w ./\-[\]!]{1,60}$/.test(pn)) return Response.json({ ok: false, error: 'That does not look like a part number.' }, { status: 400 });
+    const lookup = [
+      await step('item', () =>
+        suiteql('SELECT id, itemid, displayname, itemtype, custitem_rrp_incl_gst AS rrp_incl_gst, custitem_web_show_rrp AS show_rrp, custitemshowproductonweb AS on_web, custitem_weburl AS weburl, isinactive FROM item WHERE UPPER(itemid) = ' + sqlStr(pn.toUpperCase()), 5),
+      ),
+      await step('price levels', () =>
+        suiteql('SELECT BUILTIN.DF(p.pricelevel) AS level, p.quantity, p.unitprice FROM pricing p WHERE p.item IN (SELECT id FROM item WHERE UPPER(itemid) = ' + sqlStr(pn.toUpperCase()) + ') ORDER BY level, p.quantity', 100),
+      ),
+    ];
+    return Response.json({ ok: lookup.every((c) => c.ok), pn, checks: lookup }, { headers: { 'Cache-Control': 'no-store' } });
+  }
 
   // One at a time: NetSuite limits how many requests an account can run at once.
   const jobs: [string, () => Promise<unknown>][] = [
