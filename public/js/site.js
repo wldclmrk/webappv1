@@ -256,5 +256,11 @@ window.WeldclassToast = toast;
   var qs = new URLSearchParams(location.search);
   var q = $('#q'); if (q && !q.value && qs.get('q') && location.pathname.indexOf('/search') === 0) q.value = qs.get('q');
   $$('[data-notice]').forEach(function (n) { if (qs.get(n.getAttribute('data-notice'))) n.hidden = false; });
+  // Copy buttons (distributor portal: account manager's mobile and email).
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-copy]');
+    if (!b || !navigator.clipboard) return;
+    navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function () { if (window.WeldclassToast) window.WeldclassToast('Copied'); });
+  });
 })();
 })();
