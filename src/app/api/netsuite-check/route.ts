@@ -46,7 +46,7 @@ export async function GET(req: Request) {
         suiteql('SELECT id, itemid, displayname, itemtype, custitem_rrp_incl_gst AS rrp_incl_gst, custitem_web_show_rrp AS show_rrp, custitemshowproductonweb AS on_web, custitem_weburl AS weburl, isinactive FROM item WHERE UPPER(itemid) = ' + sqlStr(pn.toUpperCase()), 5),
       ),
       await step('price levels', () =>
-        suiteql('SELECT BUILTIN.DF(p.pricelevel) AS level, p.quantity, p.unitprice FROM pricing p WHERE p.item IN (SELECT id FROM item WHERE UPPER(itemid) = ' + sqlStr(pn.toUpperCase()) + ') ORDER BY level, p.quantity', 100),
+        suiteql('SELECT BUILTIN.DF(p.pricelevel) AS level, p.quantity, p.unitprice FROM pricing p WHERE p.item IN (SELECT id FROM item WHERE UPPER(itemid) = ' + sqlStr(pn.toUpperCase()) + ') ORDER BY p.pricelevel, p.quantity', 100),
       ),
     ];
     return Response.json({ ok: lookup.every((c) => c.ok), pn, checks: lookup }, { headers: { 'Cache-Control': 'no-store' } });
