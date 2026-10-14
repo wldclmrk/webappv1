@@ -1,3 +1,4 @@
+import { products } from '@/lib/content';
 import { NetSuiteError, accessToken, netsuiteConfigured, productSource, sqlStr, suiteql } from '@/lib/netsuite';
 
 /**
@@ -37,6 +38,10 @@ export async function GET(req: Request) {
   const auth = await step('token', async () => ((await accessToken()) ? 'Signed in to NetSuite' : 'No token'));
   if (!auth.ok) return Response.json({ ok: false, productSource: productSource(), account: process.env.NETSUITE_ACCOUNT_ID, checks: [auth] }, { status: 502 });
 
+  // Image audit: /api/netsuite-check/?audit=images (add &format=csv for a spreadsheet)
+  const q = new URL(req.url).searchParams;
+  if (q.get('audit') === 'images') return imageAudit(q.get('format') === 'csv');
+
   // Part number lookup: /api/netsuite-check/?pn=91300AMA1
   const pn = new URL(req.url).searchParams.get('pn')?.trim();
   if (pn) {
@@ -68,4 +73,57 @@ export async function GET(req: Request) {
   const checks = [];
   for (const [name, fn] of jobs) checks.push(await step(name, fn));
   return Response.json({ ok: checks.every((c) => c.ok), productSource: productSource(), account: process.env.NETSUITE_ACCOUNT_ID, checks: [auth, ...checks] }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+/** Does an image URL load? (HEAD, falling back to a 1-byte GET for servers that refuse HEAD.) */
+async function loads(url: string): Promise<boolean> {
+  try {
+    let r = await fetch(url, { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if (r.status === 405 || r.status === 403) r = await fetch(url, { headers: { Range: 'bytes=0-0' }, cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    return r.ok && /^image\//.test(r.headers.get('content-type') ?? 'image/');
+  } catch {
+    return false;
+  }
+}
+
+/** Every part number on the site, with its current site photo and the photo NetSuite holds for it. */
+async function imageAudit(csv: boolean) {
+  const ns = new Map<string, { main: string; second: string; web: string }>();
+  const rows = await suiteql<Record<string, string>>(
+    "SELECT itemid, custitem_itemimageurl AS main, custitem6 AS second, custitemshowproductonweb AS web FROM item WHERE isinactive = 'F' AND (custitemshowproductonweb = 'T' OR custitem_itemimageurl IS NOT NULL)",
+    6000,
+  );
+  for (const r of rows) ns.set(String(r.itemid).toUpperCase(), { main: r.main ?? '', second: r.second ?? '', web: r.web ?? '' });
+
+  const list = products.flatMap((x) => (x.parts ?? []).map((p) => ({ product: x.name, page: x.path, pn: p.pn, siteImage: Number(p.img) > 0 })));
+  const out: { product: string; page: string; pn: string; siteImage: boolean; inNetSuite: boolean; netsuiteImage: string; netsuiteImageLoads: boolean | null; status: string }[] = [];
+  const queue = [...list];
+  await Promise.all(
+    Array.from({ length: 16 }, async () => {
+      for (let it = queue.shift(); it; it = queue.shift()) {
+        const n = ns.get(it.pn.toUpperCase());
+        const url = n?.main ?? '';
+        const ok = url ? await loads(url) : null;
+        const status = it.siteImage
+          ? url && ok ? 'OK: site photo, NetSuite photo also loads' : 'OK: site photo only'
+          : url && ok ? 'FIXABLE: no site photo, NetSuite photo loads'
+          : url ? 'MISSING: NetSuite photo link is broken'
+          : n ? 'MISSING: no photo in NetSuite'
+          : 'MISSING: part number not found in NetSuite';
+        out.push({ ...it, inNetSuite: Boolean(n), netsuiteImage: url, netsuiteImageLoads: ok, status });
+      }
+    }),
+  );
+  out.sort((a, b) => a.product.localeCompare(b.product) || a.pn.localeCompare(b.pn));
+  const summary: Record<string, number> = {};
+  for (const r of out) summary[r.status] = (summary[r.status] ?? 0) + 1;
+
+  if (csv) {
+    const cell = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const body = ['Product,Page,Part number,Site photo,In NetSuite,NetSuite image URL,NetSuite image loads,Status']
+      .concat(out.map((r) => [r.product, r.page, r.pn, r.siteImage ? 'Yes' : 'No', r.inNetSuite ? 'Yes' : 'No', r.netsuiteImage, r.netsuiteImageLoads === null ? '' : r.netsuiteImageLoads ? 'Yes' : 'No', r.status].map(cell).join(',')))
+      .join('\r\n');
+    return new Response('\ufeff' + body, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="part-image-audit.csv"', 'Cache-Control': 'no-store' } });
+  }
+  return Response.json({ ok: true, parts: out.length, summary, problems: out.filter((r) => !r.status.startsWith('OK')) }, { headers: { 'Cache-Control': 'no-store' } });
 }
