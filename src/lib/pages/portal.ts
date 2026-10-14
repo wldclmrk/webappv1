@@ -65,8 +65,14 @@ function frame(s: Session, accts: Customer[], tab: PortalTab, inner: string): st
   );
 }
 
-function failed(): string {
-  return '<div class="note" role="alert" style="background:#FFF4CC;color:#6B4E00"><span><b>We could not load your account just now.</b> Please refresh in a minute, or call ' + esc(mod('phone')) + '.</span></div>';
+function failed(e?: unknown): string {
+  // Preview sites only (private to your Vercel team): show NetSuite's own error to speed up testing.
+  const err = e as { message?: string; status?: number; body?: string } | undefined;
+  const detail =
+    err && process.env.VERCEL_ENV !== 'production'
+      ? '<pre style="white-space:pre-wrap;font-size:12.5px;margin:10px 0 0">Preview only: ' + esc([err.message, err.status, err.body].filter(Boolean).join(' | ')) + '</pre>'
+      : '';
+  return '<div class="note" role="alert" style="background:#FFF4CC;color:#6B4E00"><span><b>We could not load your account just now.</b> Please refresh in a minute, or call ' + esc(mod('phone')) + '.' + detail + '</span></div>';
 }
 
 export async function portalHtml(s: Session, tab: PortalTab, show = ''): Promise<string> {
@@ -75,13 +81,16 @@ export async function portalHtml(s: Session, tab: PortalTab, show = ''): Promise
     accts = await customers(s.c);
   } catch (e) {
     console.error('Dealer portal accounts failed', (e as Error).message);
-    return frame(s, accts, tab, failed());
+    return frame(s, accts, tab, failed(e));
   }
   const cur = accts.find((c) => c.id === s.cur);
   let inner = '';
   try {
     if (tab === 'overview') {
-      const [sum, open, recent] = await Promise.all([summary(s.cur), invoices(s.cur, true, 10), orders(s.cur, 5)]);
+      // One at a time: NetSuite limits how many requests an account can run at once.
+      const sum = await summary(s.cur);
+      const open = await invoices(s.cur, true, 10);
+      const recent = await orders(s.cur, 5);
       inner =
         '<div class="pt-stats">' +
         stat('Open balance', money(sum.open), sum.openCount + ' open invoice' + (sum.openCount === 1 ? '' : 's')) +
@@ -103,7 +112,7 @@ export async function portalHtml(s: Session, tab: PortalTab, show = ''): Promise
     }
   } catch (e) {
     console.error('Dealer portal data failed', (e as Error).message, (e as { body?: string }).body ?? '');
-    inner = failed();
+    inner = failed(e);
   }
   return frame(s, accts, tab, inner);
 }
