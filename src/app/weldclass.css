@@ -513,3 +513,29 @@ h1,h2{overflow-wrap:break-word}
 .trust .ti{display:flex;gap:14px;align-items:center;color:inherit;border-radius:8px;padding:6px;margin:-6px;transition:background .2s}
 .trust .ti:hover{background:#fff}.trust .ti:hover b{color:var(--blue);text-decoration:underline;text-underline-offset:3px}
 .trust .ic{width:48px;height:48px;background:var(--blue);color:#fff}.trust .ic svg{width:24px;height:24px;stroke:#fff}
+
+/* ---------- Dealer portal ---------- */
+.pt{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.pt-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px}
+.pt-head h1{font-size:44px;margin:6px 0 4px}.pt-head p{margin:0}
+.pt-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.pt-switch{display:flex;gap:8px;align-items:center;font-size:14px}.pt-switch select{min-height:38px;max-width:260px}
+.pt-tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);overflow-x:auto}
+.pt-tabs a{padding:10px 16px;font-weight:600;color:var(--navy);border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap}
+.pt-tabs a[aria-current]{border-color:var(--orange);color:var(--blue)}
+.pt-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.pt-stat{background:#fff;border-radius:8px;padding:20px 22px;display:flex;flex-direction:column;gap:4px;border-left:4px solid var(--blue)}
+.pt-stat span{font-size:14px;color:var(--muted,#555)}.pt-stat b{font-size:28px;color:var(--navy);line-height:1.15}.pt-stat small{font-size:13px;color:#666}
+.pt-stat.bad{border-left-color:var(--orange)}.pt-stat.bad b{color:#B33A0B}
+.pt-bar{display:flex;gap:10px;flex-wrap:wrap}
+.pt-card{background:#fff;border-radius:8px;padding:22px 24px}
+.pt-card-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
+.pt-card-h h2{font-size:24px;margin:0}
+.pt-table{margin:14px 0 0}.pt-table table{min-width:640px;font-size:14px}
+.pt-table td.r,.pt-table th.r{text-align:right;white-space:nowrap}
+.pt-tag{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--tint);color:var(--blue);white-space:nowrap}
+.pt-tag.bad{background:#FFE6DA;color:#B33A0B}
+.pt-pdf{font-weight:600;font-size:13.5px}
+.pt-filter{display:flex;gap:4px;font-size:14px}.pt-filter a{padding:5px 12px;border-radius:4px;color:var(--navy)}.pt-filter a[aria-current]{background:var(--tint);color:var(--blue);font-weight:600}
+.pt-help{font-size:14px;margin:0}
+@media (max-width:760px){.pt-head h1{font-size:34px}.pt-card{padding:18px 16px}}

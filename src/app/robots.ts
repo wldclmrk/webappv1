@@ -6,7 +6,7 @@ const BOTS = ['Googlebot', 'Bingbot', 'Google-Extended', 'OAI-SearchBot', 'ChatG
 export default function robots(): MetadataRoute.Robots {
   if (process.env.NOINDEX === 'true') return { rules: [{ userAgent: '*', disallow: '/' }] };
   return {
-    rules: [{ userAgent: '*', allow: '/', disallow: ['/search', '/login', '/api/'] }, ...BOTS.map((b) => ({ userAgent: b, allow: '/' }))],
+    rules: [{ userAgent: '*', allow: '/', disallow: ['/search', '/login', '/dealer/', '/api/'] }, ...BOTS.map((b) => ({ userAgent: b, allow: '/' }))],
     sitemap: abs('/sitemap.xml'),
   };
 }

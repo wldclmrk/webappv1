@@ -256,7 +256,7 @@ window.WeldclassToast = toast;
   var qs = new URLSearchParams(location.search);
   var q = $('#q'); if (q && !q.value && qs.get('q') && location.pathname.indexOf('/search') === 0) q.value = qs.get('q');
   var hit = null;
-  if (qs.get('sent')) hit = 'sent'; else if (qs.get('formerr')) hit = 'formerr';
+  if (qs.get('sent')) hit = 'sent'; else if (qs.get('formerr')) hit = 'formerr'; else if (qs.get('expired')) hit = 'expired'; else if (qs.get('out')) hit = 'out';
   if (hit) $$('[data-notice="' + hit + '"]').forEach(function (n) { n.hidden = false; });
 })();
 })();

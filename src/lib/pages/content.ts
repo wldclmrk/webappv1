@@ -3,6 +3,7 @@ import { arr, compares, pages, posts, stockists, str, type Faq, type PostRecord,
 import { allTerms, compareIds, p, primarySub, searchProducts, subs, termUrl, topLabel, topOf, tops } from '../catalogue';
 import { band, crumbbar, crumbs, faqHtml, field, latestPosts, moreFrom, pcard, postCard, postCat, postImg, readMinutes, selectorBanner, statBand, STATES, storeCard, type Crumb } from '../blocks';
 import { icon } from '../icons';
+import { portalEnabled } from '../portal/session';
 import { crumbLd, faqLd, seo, type Seo } from '../seo';
 import { abs, asset, clip, esc, escUrl, fmtDate, img, imgUrl, mod, money, num1, pageUrl, slugify, txt, wrapTables } from '../util';
 
@@ -19,8 +20,8 @@ function formHidden(type: string, back: string): string {
 function formNotice(type: string): string {
   const msg = type === 'register' ? 'Thanks. Your application has been sent to the Weldclass team for review.' : 'Thanks. Our support team typically responds within 2-4 business hours.';
   return (
-    '<div class="note" role="status" style="margin-top:20px" data-notice="sent" hidden><b>Sent.</b>&nbsp;' + esc(msg) + '</div>' +
-    '<div class="note" role="alert" style="margin-top:20px;background:#FFF4CC;color:#6B4E00" data-notice="formerr" hidden><b>Please check the form.</b>&nbsp;Some required fields were missing.</div>'
+    '<div class="note" role="status" style="margin-top:20px" data-notice="sent" hidden><span><b>Sent.</b> ' + esc(msg) + '</span></div>' +
+    '<div class="note" role="alert" style="margin-top:20px;background:#FFF4CC;color:#6B4E00" data-notice="formerr" hidden><span><b>Please check the form.</b> Some required fields were missing.</span></div>'
   );
 }
 
@@ -376,10 +377,25 @@ export function dealerHtml(mode: 'login' | 'forgot' | 'register'): string {
   const portal = process.env.NEXT_PUBLIC_DEALER_LOGIN_URL || '';
   const phone = esc(mod('phone'));
   let body = '';
-  if (mode === 'login' || mode === 'forgot') {
+  if ((mode === 'login' || mode === 'forgot') && portalEnabled()) {
+    const n = (key: string, text: string, alert = false) =>
+      '<div class="note" role="' + (alert ? 'alert' : 'status') + '" data-notice="' + key + '" hidden' + (alert ? ' style="background:#FFF4CC;color:#6B4E00"' : '') + '><span>' + text + '</span></div>';
+    body =
+      '<p style="margin:0" class="muted">' + (mode === 'login' ? 'For authorised Weldclass distributors &amp; partners. Enter the email address on your Weldclass account and we&rsquo;ll email you a sign-in link.' : 'There are no passwords to reset. Enter the email address on your Weldclass account and we&rsquo;ll email you a sign-in link.') + '</p>' +
+      n('sent', '<b>Check your inbox.</b> If that email is on a Weldclass dealer account, a sign-in link is on its way. It works for 15 minutes.') +
+      n('expired', '<b>That sign-in link has expired or your session ended.</b> Enter your email for a new link.', true) +
+      n('out', '<b>You&rsquo;re signed out.</b>') +
+      n('formerr', '<b>Something went wrong.</b> Check the email address and try again, or call ' + phone + '.', true) +
+      '<form class="form" method="post" action="/api/portal/login/" style="grid-template-columns:1fr">' +
+      '<div aria-hidden="true" style="position:absolute;left:-9999px"><label>Leave blank <input type="text" name="website_url" tabindex="-1" autocomplete="off"></label></div>' +
+      '<div class="field full"><label for="d-em">Email address *</label><input id="d-em" name="email" type="email" required autocomplete="email" inputmode="email"></div>' +
+      '<button class="btn btn-o field full" type="submit">Email me a sign-in link</button></form>';
+  } else if (mode === 'login' || mode === 'forgot') {
     body = portal
       ? '<p style="margin:0" class="muted">' + (mode === 'login' ? 'Login is available only for authorised Weldclass Distributors &amp; partners.' : 'Password resets are handled in the dealer portal.') + '</p><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-o" href="' + escUrl(portal) + '">Go to the dealer portal</a></div>'
-      : '<p style="margin:0" class="muted">' + (mode === 'login' ? 'Login is available only for authorised Weldclass Distributors &amp; partners.' : 'Dealer passwords are reset through the dealer portal.') + '</p><div class="note" role="status"><b>Dealer login is moving.</b>&nbsp;While our new dealer portal is set up, call ' + phone + ' or <a href="' + pageUrl('contact') + '">contact us</a> for invoices, statements and account help.</div>';
+      : '<p style="margin:0" class="muted">' + (mode === 'login' ? 'Login is available only for authorised Weldclass Distributors &amp; partners.' : 'Dealer passwords are reset through the dealer portal.') + '</p><div class="note" role="status"><span><b>Dealer login is moving.</b> While our new dealer portal is set up, call ' + phone + ' or <a href="' + pageUrl('contact') + '">contact us</a> for invoices, statements and account help.</span></div>';
+  }
+  if (mode === 'login' || mode === 'forgot') {
     if (mode === 'login') {
       body +=
         '<div style="border-top:1px solid var(--line);padding-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px"><div><b style="color:var(--navy)">Need a login?</b><div class="muted" style="font-size:14px;margin:4px 0 6px">Authorised distributors and partners can apply for access.</div><a class="arrow" href="' + pageUrl('register') + '" style="font-weight:600">Register / apply for a login</a></div><div><b style="color:var(--navy)">Want to stock Weldclass?</b><div class="muted" style="font-size:14px;margin:4px 0 6px">Tell us about your business.</div><a class="arrow" href="' + pageUrl('register') + '" style="font-weight:600">Apply to become a distributor</a></div></div>' +
