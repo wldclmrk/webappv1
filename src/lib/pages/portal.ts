@@ -57,6 +57,7 @@ function frame(s: Session, accts: Customer[], tab: PortalTab, inner: string): st
     '<div class="pt-head"><div><div class="kick or">Dealer portal</div><h1 class="disp">' + esc(cur?.name ?? 'Your account') + '<span class="dot">.</span></h1>' +
     '<p class="muted">' + (cur?.number ? 'Account ' + esc(cur.number) + ' &middot; ' : '') + 'Signed in as ' + esc(s.e) + '</p></div>' +
     '<div class="pt-actions">' + switcher + '<form method="post" action="/api/portal/logout/"><button class="btn btn-l btn-sm" type="submit">Sign out</button></form></div></div>' +
+    '<div class="note" role="status" data-notice="welcome" hidden><span><b>Password saved.</b> You&rsquo;re logged in. Next time, log in with your email and this password.</span></div>' +
     '<nav class="pt-tabs" aria-label="Dealer portal">' + TABS.map(([k, label, href]) => '<a href="' + href + '"' + (k === tab ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</nav>' +
     inner +
     '<p class="muted pt-help">Questions about your account? Call ' + esc(mod('phone')) + ' or <a href="' + pageUrl('contact') + '">contact us</a>.</p>' +

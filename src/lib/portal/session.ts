@@ -1,20 +1,22 @@
 /**
- * Dealer portal sign-in: emailed one-time links and a signed session cookie.
- * Stateless (no database): both are HMAC-signed with PORTAL_SECRET. Server-only.
+ * Dealer portal sign-in: signed session cookie and emailed set/reset-password links.
+ * Both are HMAC-signed with PORTAL_SECRET. A reset link carries a fingerprint of the current
+ * password, so it stops working once used (or once the password changes). Server-only.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { netsuiteConfigured } from '../netsuite';
+import { dbConfigured } from './db';
 
 export const COOKIE = 'wc_dealer';
-const LINK_MINUTES = 15;
+const LINK_MINUTES = 30;
 const SESSION_HOURS = 12;
 
 export type Session = { e: string; c: number[]; cur: number; exp: number };
-type Link = { e: string; exp: number };
+type Link = { e: string; v: string; exp: number };
 
-/** The portal is on when NetSuite is connected and a signing secret is set. */
+/** The portal is on when NetSuite and the database are connected and a signing secret is set. */
 export function portalEnabled(): boolean {
-  return netsuiteConfigured() && String(process.env.PORTAL_SECRET ?? '').length >= 32;
+  return netsuiteConfigured() && dbConfigured() && String(process.env.PORTAL_SECRET ?? '').length >= 32;
 }
 
 function mac(purpose: string, body: string): string {
@@ -41,12 +43,17 @@ function open<T extends { exp: number }>(purpose: string, token: string | undefi
   }
 }
 
-export function makeLink(email: string): string {
-  return seal('link', { e: email, exp: Date.now() + LINK_MINUTES * 60_000 } satisfies Link);
+/** Fingerprint of the stored password hash ('' = none yet), so a used reset link is dead. */
+export function hashVersion(hash: string): string {
+  return mac('pwv', hash || 'none').slice(0, 16);
 }
 
-export function readLink(token: string | null): Link | null {
-  return open<Link>('link', token);
+export function makeLink(email: string, currentHash: string): string {
+  return seal('reset', { e: email, v: hashVersion(currentHash), exp: Date.now() + LINK_MINUTES * 60_000 } satisfies Link);
+}
+
+export function readLink(token: string | null | undefined): Link | null {
+  return open<Link>('reset', token);
 }
 
 export function makeSession(email: string, customers: number[], cur = customers[0]): string {

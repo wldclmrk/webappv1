@@ -371,25 +371,50 @@ export function searchHtml(qRaw: string, fcat: string, pageNum: number): string 
 
 /* ---------- Dealer login, reset password, apply for a login ---------- */
 
-export const DEALER_TITLES: Record<string, string> = { login: 'Dealer login', forgot: 'Reset password', register: 'Apply for a login' };
+export const DEALER_TITLES: Record<string, string> = { login: 'Dealer login', forgot: 'Reset password', register: 'Apply for a login', set: 'Set your password' };
 
-export function dealerHtml(mode: 'login' | 'forgot' | 'register'): string {
+const spamTrap = '<div aria-hidden="true" style="position:absolute;left:-9999px"><label>Leave blank <input type="text" name="website_url" tabindex="-1" autocomplete="off"></label></div>';
+
+export function dealerHtml(mode: 'login' | 'forgot' | 'register' | 'set', token = ''): string {
   const portal = process.env.NEXT_PUBLIC_DEALER_LOGIN_URL || '';
   const phone = esc(mod('phone'));
+  const n = (key: string, text: string, alert = false) =>
+    '<div class="note" role="' + (alert ? 'alert' : 'status') + '" data-notice="' + key + '" hidden' + (alert ? ' style="background:#FFF4CC;color:#6B4E00"' : '') + '><span>' + text + '</span></div>';
   let body = '';
-  if ((mode === 'login' || mode === 'forgot') && portalEnabled()) {
-    const n = (key: string, text: string, alert = false) =>
-      '<div class="note" role="' + (alert ? 'alert' : 'status') + '" data-notice="' + key + '" hidden' + (alert ? ' style="background:#FFF4CC;color:#6B4E00"' : '') + '><span>' + text + '</span></div>';
+  if (mode === 'login' && portalEnabled()) {
     body =
-      '<p style="margin:0" class="muted">' + (mode === 'login' ? 'For authorised Weldclass distributors &amp; partners. Enter the email address on your Weldclass account and we&rsquo;ll email you a sign-in link.' : 'There are no passwords to reset. Enter the email address on your Weldclass account and we&rsquo;ll email you a sign-in link.') + '</p>' +
-      n('sent', '<b>Check your inbox.</b> If that email is on a Weldclass dealer account, a sign-in link is on its way. It works for 15 minutes.') +
-      n('expired', '<b>That sign-in link has expired or your session ended.</b> Enter your email for a new link.', true) +
-      n('out', '<b>You&rsquo;re signed out.</b>') +
+      '<p style="margin:0" class="muted">Login is available only for authorised Weldclass Distributors &amp; partners.</p>' +
+      n('bad', '<b>Incorrect username or password.</b> Check them and try again, or <a href="' + pageUrl('forgot') + '">reset your password</a>.', true) +
+      n('locked', '<b>Too many attempts.</b> This account is locked for 15 minutes. <a href="' + pageUrl('forgot') + '">Reset your password</a> to unlock it now.', true) +
+      n('inactive', '<b>This login is not linked to an active Weldclass account.</b> Call ' + phone + ' and we&rsquo;ll sort it out.', true) +
+      n('expired', '<b>Your session has ended.</b> Please log in again.', true) +
+      n('out', '<b>You&rsquo;re logged out.</b>') +
+      n('formerr', '<b>Something went wrong.</b> Please try again, or call ' + phone + '.', true) +
+      '<form class="form" method="post" action="/api/portal/signin/" style="grid-template-columns:1fr">' + spamTrap +
+      '<div class="field full"><label for="d-login">Username or email address *</label><input id="d-login" name="login" type="text" required autocomplete="username" autocapitalize="none" spellcheck="false"></div>' +
+      '<div class="field full"><label for="d-pw">Password *</label><input id="d-pw" name="password" type="password" required autocomplete="current-password"></div>' +
+      '<button class="btn btn-o field full" type="submit">Log in</button></form>' +
+      '<p style="margin:0;font-size:14px"><a href="' + pageUrl('forgot') + '" style="font-weight:600">Forgot your password, or logging in for the first time?</a></p>';
+  } else if (mode === 'forgot' && portalEnabled()) {
+    body =
+      '<p style="margin:0" class="muted">First time here, or forgotten your password? Enter the email address on your Weldclass account and we&rsquo;ll email you a link to set a new password.</p>' +
+      n('sent', '<b>Check your inbox.</b> If that email is on a Weldclass dealer account, a link is on its way. It works once, for 30 minutes.') +
+      n('expired', '<b>That link has expired or has already been used.</b> Enter your email for a new one.', true) +
       n('formerr', '<b>Something went wrong.</b> Check the email address and try again, or call ' + phone + '.', true) +
-      '<form class="form" method="post" action="/api/portal/login/" style="grid-template-columns:1fr">' +
-      '<div aria-hidden="true" style="position:absolute;left:-9999px"><label>Leave blank <input type="text" name="website_url" tabindex="-1" autocomplete="off"></label></div>' +
+      '<form class="form" method="post" action="/api/portal/reset/" style="grid-template-columns:1fr">' + spamTrap +
       '<div class="field full"><label for="d-em">Email address *</label><input id="d-em" name="email" type="email" required autocomplete="email" inputmode="email"></div>' +
-      '<button class="btn btn-o field full" type="submit">Email me a sign-in link</button></form>';
+      '<button class="btn btn-o field full" type="submit">Email me a link</button></form>';
+  } else if (mode === 'set') {
+    body =
+      '<p style="margin:0" class="muted">Choose a password with at least 10 characters. A short phrase is easier to remember than a jumble of symbols.</p>' +
+      n('short', '<b>That password is too short.</b> Use at least 10 characters.', true) +
+      n('long', '<b>That password is too long.</b> Use 200 characters or fewer.', true) +
+      n('mismatch', '<b>The two passwords don&rsquo;t match.</b> Please type them again.', true) +
+      n('formerr', '<b>Something went wrong saving your password.</b> Please try again, or call ' + phone + '.', true) +
+      '<form class="form" method="post" action="/api/portal/set-password/" style="grid-template-columns:1fr"><input type="hidden" name="t" value="' + esc(token) + '">' +
+      '<div class="field full"><label for="d-pw1">New password *</label><input id="d-pw1" name="password" type="password" required minlength="10" autocomplete="new-password"></div>' +
+      '<div class="field full"><label for="d-pw2">Type it again *</label><input id="d-pw2" name="password2" type="password" required minlength="10" autocomplete="new-password"></div>' +
+      '<button class="btn btn-o field full" type="submit">Save password and log in</button></form>';
   } else if (mode === 'login' || mode === 'forgot') {
     body = portal
       ? '<p style="margin:0" class="muted">' + (mode === 'login' ? 'Login is available only for authorised Weldclass Distributors &amp; partners.' : 'Password resets are handled in the dealer portal.') + '</p><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-o" href="' + escUrl(portal) + '">Go to the dealer portal</a></div>'
@@ -403,7 +428,7 @@ export function dealerHtml(mode: 'login' | 'forgot' | 'register'): string {
     } else {
       body += '<a class="arrow" href="' + pageUrl('login') + '" style="font-weight:600">Back to login</a>';
     }
-  } else {
+  } else if (mode === 'register') {
     const st = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'].map((s) => '<option>' + s + '</option>').join('');
     body =
       '<p class="muted" style="margin:0">For retail, distribution and industrial supply businesses. Applications are reviewed by the Weldclass team.</p>' + formNotice('register') +
