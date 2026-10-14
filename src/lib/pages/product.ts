@@ -4,7 +4,7 @@ import { crumbbar, faqHtml, pcard, type Crumb } from '../blocks';
 import { detailsPanel } from '../details';
 import { icon } from '../icons';
 import { crumbLd, faqLd, seo, type Seo } from '../seo';
-import { abs, asset, clip, esc, escUrl, img, imgUrl, money, pageUrl, txt, wpautopIfPlain } from '../util';
+import { abs, asset, clip, esc, escUrl, img, imgUrl, mod, money, pageUrl, txt, wpautopIfPlain } from '../util';
 
 function data(x: P) {
   const id = x.id;
@@ -76,7 +76,7 @@ export function productHtml(x: P): { html: string; curTop: number } {
     ['downloads', 'Downloads', dls.length],
     ['videos', 'Videos', vids.length],
     ['reviews', 'Reviews', reviews.length],
-  ] as [string, string, number][]).filter((t) => t[0] === 'details' || (t[0] === 'specs' ? specRows.length : t[2]));
+  ] as [string, string, number][]); // Same six tabs on every product; empty ones say so.
   let rel = upsells(id).filter((r) => !!p(r)).slice(0, 8);
   if (!rel.length && sub) rel = prodsIn(sub).filter((r) => r !== id).slice(0, 4);
   const descRaw = x.rec.description;
@@ -88,7 +88,7 @@ export function productHtml(x: P): { html: string; curTop: number } {
 
   /* Panels */
   const panel: Record<string, string> = {};
-  panel.details = detailsPanel(id, desc, m.more, gal);
+  panel.details = detailsPanel(id, desc, m.more);
 
   let h = '<h2 class="disp" style="font-size:28px;margin-bottom:14px">' + esc(x.name) + ' specifications<span class="dot">.</span></h2><div class="tbl" style="max-width:820px"><table><tbody>';
   for (const r of specRows) {
@@ -137,6 +137,15 @@ export function productHtml(x: P): { html: string; curTop: number } {
     }
     panel.reviews = h + '</div></div></div>';
   }
+
+  /* Every product shows the same six tabs; a tab with nothing to show says so plainly. */
+  const empty = (msg: string) =>
+    '<div class="tab-empty"><p>' + msg + '</p><p>Questions about this product? Call ' + esc(mod('phone')) + ' or <a href="' + pageUrl('contact') + '">contact us</a>.</p></div>';
+  if (!specRows.length) panel.specs = empty('Specifications for ' + esc(x.name) + ' are listed in the part number table at the top of this page.');
+  if (!faq.length) panel.faq = empty('There are no FAQs for ' + esc(x.name) + ' yet.');
+  if (!dls.length) panel.downloads = empty('There are no downloads for ' + esc(x.name) + ' yet.');
+  if (!vids.length) panel.videos = empty('There are no videos for ' + esc(x.name) + ' yet.');
+  if (!reviews.length) panel.reviews = empty('There are no reviews for ' + esc(x.name) + ' yet.');
 
   /* Page */
   const cr: Crumb[] = [['Home', '/']];

@@ -4,9 +4,9 @@
  * remaining cards across up to three columns.
  */
 import { parseFragment, serializeOuter, serialize, type DefaultTreeAdapterMap } from 'parse5';
-import { productMeta, p } from './catalogue';
-import { DT_ICONS, icon } from './icons';
-import { esc, img, money, num1, pageUrl, txt } from './util';
+import { p } from './catalogue';
+import { DT_ICONS } from './icons';
+import { esc, txt } from './util';
 
 export function dtIcon(h: string): string {
   let k = 'check';
@@ -107,73 +107,34 @@ export function secLis(sec: Sec | null): string[] {
   return m.map((x) => txt(x[1])).filter(Boolean);
 }
 
-export function detailsPanel(id: number, desc: string, more: string, gal: number[]): string {
+/** Overview content never shows images, embeds or captions: those belong in the gallery and the Videos tab. */
+export function stripMedia(html: string): string {
+  return String(html)
+    .replace(/<figure[\s\S]*?<\/figure>/gi, '')
+    .replace(/<picture[\s\S]*?<\/picture>/gi, '')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<div[^>]*class="[^"]*wp-caption[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<img\b[^>]*>/gi, '')
+    .replace(/<a\b[^>]*>\s*<\/a>/gi, '')
+    .replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, '');
+}
+
+/**
+ * "Details & features" tab: one template for every product. A single full-width Overview card holds
+ * the description, then each features section (heading and its list or text) in the order written,
+ * then any footnotes. No side panel and no images.
+ */
+export function detailsPanel(id: number, desc: string, more: string): string {
   const x = p(id)!;
   const f = parseFeatures(more);
-  const specs = productMeta(id).specs;
-  const pick = (re: RegExp): Sec | null => {
-    const i = f.secs.findIndex((s) => re.test(s.h.toUpperCase()));
-    if (i < 0) return null;
-    return f.secs.splice(i, 1)[0];
-  };
-  const glance = pick(/AT A GLANCE/);
-  const funcs = pick(/^(FUNCTIONS|PROCESSES)/);
-  let hl = glance ? secLis(glance) : [];
-  if (!hl.length && specs.length) hl = specs.slice(0, 4).map((r) => r[0] + ': ' + r[1]);
-  if (!hl.length && f.secs.length) {
-    const hlSec = f.secs.find((s) => /FEATURE/.test(s.h.toUpperCase())) ?? f.secs[0];
-    const all = secLis(hlSec);
-    hl = all.slice(0, 4);
-    if (hl.length && all.length <= 5) f.secs = f.secs.filter((s) => s !== hlSec);
+  let body = stripMedia(desc + f.intro);
+  for (const sec of f.secs) {
+    const h = sec.h.replace(/&amp;/g, '&').replace(/\s*:\s*$/, '');
+    body += '<h3 class="ov-h">' + esc(h.toUpperCase()) + (/[?!]$/.test(h) ? '' : ':') + '</h3>' + stripMedia(sec.body.join(''));
   }
-  const fn = secLis(funcs);
-  const descTxt = txt(desc);
-  const dlen = Array.from(descTxt).length;
-  const img2 = gal[1] ?? 0;
-  let inner: Sec | null = null;
-  if (dlen < 600 && !img2 && f.secs.length) {
-    let ki = 0;
-    f.secs.forEach((s, i) => {
-      if (/FEATURE/.test(s.h.toUpperCase()) && !ki) ki = i + 1;
-    });
-    inner = f.secs.splice(ki ? ki - 1 : 0, 1)[0];
-  }
-  const overview =
-    '<article class="dt-ov"><div class="dt-h">' + dtIcon('OVERVIEW') + '<h3>Overview</h3></div><div class="rich">' + desc + f.intro + '</div>' +
-    (dlen < 520 && img2 ? '<div class="dt-img">' + img(img2, x.name + ' detail') + '</div>' : '') +
-    (inner ? '<div class="dt-inner"><div class="dt-h">' + dtIcon(inner.h.toUpperCase()) + '<h3>' + esc(titleCase(inner.h)) + '</h3></div><div class="rich">' + inner.body.join('') + '</div></div>' : '') +
-    '</article>';
-
-  const fp = x.from;
-  let side = '<aside class="dt-hl"><div class="kick or">' + (glance ? 'At a glance' : 'Key facts') + '</div>';
-  if (hl.length) {
-    side += '<ul class="dt-facts">' + hl.slice(0, 5).map((v) => '<li>' + esc(v.replace(/^\*|\*$/g, '').trim()) + '</li>').join('') + '</ul>';
-  }
-  if (fn.length) {
-    side += '<div class="dt-proc"><span>' + esc(titleCase(funcs!.h)) + '</span>' + fn.map((v) => '<b>' + esc(v) + '</b>').join('') + '</div>';
-  }
-  side +=
-    '<div class="dt-buy">' + (x.rating && x.review_cnt >= 3 ? '<div class="dt-rate"><b>' + num1(x.rating) + '</b>/10<span>' + x.review_cnt + ' reviews</span></div>' : '') +
-    (fp ? '<div class="dt-rrp"><span>' + (x.prices.length > 1 ? 'RRP from' : 'RRP') + '</span><b>' + money(fp) + '</b></div>' : '') +
-    '<a class="btn btn-o" href="' + esc(pageUrl('where-to-buy', { product: id })) + '">' + icon('pin') + ' Where to buy</a></div></aside>';
-
-  const cards = f.secs.map((s) => {
-    const H = s.h.toUpperCase();
-    const cls = /RELATED|ARTICLE/.test(H) ? ' dt-links' : /INCLUDE|CONTENT/.test(H) ? ' dt-box' : '';
-    return '<section class="dt-card' + cls + '"><div class="dt-h">' + dtIcon(H) + '<h3>' + esc(titleCase(s.h)) + '</h3></div><div class="rich">' + s.body.join('') + '</div></section>';
-  });
-  const ncol = Math.min(3, cards.length);
-  let grid = '';
-  if (ncol) {
-    const cols: string[][] = Array.from({ length: ncol }, () => []);
-    const hts = new Array(ncol).fill(0);
-    for (const html of cards) {
-      const w = 90 + (html.match(/<li/g) ?? []).length * 30 + Array.from(txt(html)).length * 0.35;
-      const k = hts.indexOf(Math.min(...hts));
-      cols[k].push(html);
-      hts[k] += w;
-    }
-    grid = '<div class="dt-cols n' + ncol + '">' + cols.map((c) => '<div class="dt-col">' + c.join('') + '</div>').join('') + '</div>';
-  }
-  return '<h2 class="sr">' + esc(x.name) + ' details and features</h2><div class="dt"><div class="dt-top">' + overview + side + '</div>' + grid + (f.notes ? '<div class="dt-note">' + f.notes + '</div>' : '') + '</div>';
+  if (f.notes) body += '<div class="dt-note">' + stripMedia(f.notes) + '</div>';
+  return (
+    '<h2 class="sr">' + esc(x.name) + ' details and features</h2>' +
+    '<article class="dt-ov ov-one"><div class="dt-h">' + dtIcon('OVERVIEW') + '<h3>Overview</h3></div><div class="rich">' + body + '</div></article>'
+  );
 }
