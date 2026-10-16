@@ -59,6 +59,30 @@ export async function GET(req: Request) {
     return Response.json({ ok: checks.every((c) => c.ok), customer: cu, checks }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
+  // Customer part number check: /api/netsuite-check/?audit=crossref (&customer=C05639 to focus on one customer)
+  if (q.get('audit') === 'crossref') {
+    const num = String(q.get('customer') ?? '').trim();
+    const checks = [
+      await step('custom record types that look like cross-references', () =>
+        suiteql("SELECT scriptid, name FROM customrecordtype WHERE LOWER(name) LIKE '%cross%' OR LOWER(name) LIKE '%part%' OR LOWER(name) LIKE '%customer item%' OR LOWER(scriptid) LIKE '%xref%' OR LOWER(scriptid) LIKE '%cross%'", 50)),
+      await step('item fields that look like cross-references', () =>
+        suiteql("SELECT scriptid, name, fieldtype FROM customfield WHERE fieldtype = 'ITEM' AND (LOWER(scriptid) LIKE '%cross%' OR LOWER(name) LIKE '%cross%' OR LOWER(name) LIKE '%part%')", 50)),
+      await step('items with a saved cross-reference', () =>
+        suiteql("SELECT itemid, custitem_weldclass_crossref_con_saved AS crossref FROM item WHERE custitem_weldclass_crossref_con_saved IS NOT NULL AND REPLACE(REPLACE(custitem_weldclass_crossref_con_saved, ',', ''), ' ', '') IS NOT NULL", 10)),
+    ];
+    // Show a few rows of each matching custom record so we can see which columns hold the customer and their part number.
+    const types = (checks[0].ok ? (checks[0].result as { scriptid: string }[]) : []).slice(0, 6);
+    for (const t of types) {
+      const id = String(t.scriptid).toLowerCase();
+      if (!/^customrecord[a-z0-9_]+$/.test(id)) continue;
+      checks.push(await step('sample rows: ' + id, async () => (await suiteql<Record<string, unknown>>('SELECT * FROM ' + id, 5)).map(trim)));
+    }
+    if (num && /^[\w-]{1,40}$/.test(num)) {
+      checks.push(await step('customer ' + num, () => suiteql('SELECT id, companyname, entityid FROM customer WHERE UPPER(entityid) = ' + sqlStr(num.toUpperCase()), 1)));
+    }
+    return Response.json({ ok: true, checks }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
   // Part number lookup: /api/netsuite-check/?pn=91300AMA1
   const pn = new URL(req.url).searchParams.get('pn')?.trim();
   if (pn) {
