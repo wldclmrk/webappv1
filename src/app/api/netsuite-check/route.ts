@@ -77,25 +77,27 @@ export async function GET(req: Request) {
       if (!/^customrecord[a-z0-9_]+$/.test(id)) continue;
       checks.push(await step('sample rows: ' + id, async () => (await suiteql<Record<string, unknown>>('SELECT * FROM ' + id, 5)).map(trim)));
     }
-    if (num && /^[\w-]{1,40}$/.test(num)) {
-      // Every filled-in custom field on the items this customer buys most, to spot where their part numbers live.
-      checks.push(await step('custom fields on items ' + num + ' buys', async () => {
-        const [cu] = await suiteql<{ id: string }>('SELECT id FROM customer WHERE UPPER(entityid) = ' + sqlStr(num.toUpperCase()), 1);
-        if (!cu) return 'No such customer';
-        const top = await suiteql<{ item: string }>(
-          "SELECT tl.item, COUNT(*) AS n FROM transaction t JOIN transactionline tl ON tl.transaction = t.id WHERE t.entity = " + Number(cu.id) +
-            " AND t.type = 'SalesOrd' AND tl.mainline = 'F' AND tl.taxline = 'F' AND tl.item IS NOT NULL GROUP BY tl.item ORDER BY COUNT(*) DESC",
-          6,
-        );
-        const out = [];
-        for (const t of top) {
-          const [row] = await suiteql<Record<string, unknown>>('SELECT * FROM item WHERE id = ' + Number(t.item), 1);
-          if (!row) continue;
-          const keep = Object.fromEntries(Object.entries(row).filter(([k, v]) => /^custitem|^itemid$|^displayname$|^vendorname$|^upccode$|^externalid$/.test(k) && v !== null && String(v).trim() !== '' && String(v) !== 'F'));
-          out.push(trim(keep));
-        }
-        return out;
+    // Known pair: &find=2-098FM&value=01663730 -> which field on that item holds the customer's number.
+    const find = String(q.get('find') ?? '').trim();
+    const value = String(q.get('value') ?? '').trim();
+    if (find && /^[\w ./-]{1,60}$/.test(find)) {
+      checks.push(await step('all filled-in fields on ' + find, async () => {
+        const [row] = await suiteql<Record<string, unknown>>('SELECT * FROM item WHERE UPPER(itemid) = ' + sqlStr(find.toUpperCase()), 1);
+        if (!row) return 'No item ' + find;
+        return trim(Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null && String(v).trim() !== '' && String(v) !== 'F')));
       }));
+      if (value && /^[\w ./-]{1,60}$/.test(value)) {
+        checks.push(await step('fields on ' + find + ' containing ' + value, async () => {
+          const [row] = await suiteql<Record<string, unknown>>('SELECT * FROM item WHERE UPPER(itemid) = ' + sqlStr(find.toUpperCase()), 1);
+          return row ? Object.entries(row).filter(([, v]) => String(v ?? '').includes(value)).map(([k, v]) => ({ field: k, value: v })) : [];
+        }));
+      }
+    }
+    if (value && /^[\w ./-]{1,60}$/.test(value)) {
+      checks.push(await step('items whose combined cross-reference contains ' + value, () =>
+        suiteql("SELECT itemid, custitem_weldclass_crossref_con_saved AS crossref FROM item WHERE custitem_weldclass_crossref_con_saved LIKE " + sqlStr('%' + value + '%'), 10)));
+    }
+    if (num && /^[\w-]{1,40}$/.test(num)) {
       checks.push(await step('customer ' + num, () => suiteql('SELECT id, companyname, entityid FROM customer WHERE UPPER(entityid) = ' + sqlStr(num.toUpperCase()), 1)));
     }
     return Response.json({ ok: true, checks }, { headers: { 'Cache-Control': 'no-store' } });

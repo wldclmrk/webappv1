@@ -186,7 +186,7 @@ export function productHtml(x: P): { html: string; curTop: number } {
     o += '<div class="plist" role="list">';
     for (const q of parts) {
       const d = q.d.replace(/\s*Also (available|known)[\s\S]*$/i, '').trim();
-      o += '<div class="prow' + (hasTh ? ' wth' : '') + '" role="listitem" data-ptext="' + esc((q.pn + ' ' + d).toLowerCase()) + '">' + (hasTh ? '<span class="pth">' + (q.img ? img(q.img, q.pn + ' ' + Array.from(d).slice(0, 60).join(''), '', 'thumbnail') : '') + '</span>' : '') + '<span class="pn">' + esc(q.pn) + '</span><span class="pd">' + esc(d) + '</span><span class="pp">' + (q.p ? esc(q.p) : '<span class="na">See distributor</span>') + '</span></div>';
+      o += '<div class="prow' + (hasTh ? ' wth' : '') + '" role="listitem" data-ptext="' + esc((q.pn + ' ' + d).toLowerCase()) + '">' + (hasTh ? '<span class="pth">' + (q.img ? img(q.img, q.pn + ' ' + Array.from(d).slice(0, 60).join(''), '', 'thumbnail') : '') + '</span>' : '') + '<span class="pn" data-pn="' + esc(q.pn) + '">' + esc(q.pn) + '</span><span class="pd">' + esc(d) + '</span><span class="pp">' + (q.p ? esc(q.p) : '<span class="na">See distributor</span>') + '</span></div>';
     }
     o += '</div><div class="pnone" hidden>No part numbers match.</div></div>';
   }

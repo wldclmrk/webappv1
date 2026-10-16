@@ -3,6 +3,7 @@
  * signed session. Each loader is independent, so one panel failing never blanks the whole page.
  */
 import { sqlId, suiteql } from '../netsuite';
+import { crossrefFor, partNumberMap } from './crossref';
 
 const num = (v: unknown) => (v === null || v === undefined || v === '' ? 0 : Number(v));
 
@@ -140,6 +141,16 @@ export async function frequentlyOrdered(a: Account, limit = 10): Promise<Frequen
     const times = Math.max(1, num(r.times));
     return { item: Number(r.item), pn: r.itemid ?? '', name: r.displayname || r.itemid || '', times, last: r.lastdate ?? '', usual: Math.max(1, Math.round(num(r.qty) / times)), price: null };
   });
+  // Customers with their own part numbers (e.g. Blackwoods) see their codes, not ours.
+  const xref = crossrefFor(a);
+  if (xref && list.length) {
+    try {
+      const m = await partNumberMap(xref);
+      for (const f of list) f.pn = m.get(f.pn.toUpperCase()) ?? f.pn;
+    } catch {
+      // Fall back to Weldclass part numbers.
+    }
+  }
   if (list.length && a.priceLevelId) {
     const prices = await yourPrices(a, list.map((f) => f.item));
     for (const f of list) f.price = prices.get(f.item) ?? null;

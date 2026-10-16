@@ -632,3 +632,5 @@ h1,h2{overflow-wrap:break-word}
 .pd-hero .pd-switch label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#C9CAF0}
 .pd-hero .pd-switch select{max-width:340px;font-size:14px;padding:6px 8px;border-radius:4px;border:0}
 .pd-nav .pd-me{margin-left:auto;flex:0 0 auto}
+.cpn-wait [data-pn]{visibility:hidden}
+.cpn-wait [data-pn]{visibility:hidden}

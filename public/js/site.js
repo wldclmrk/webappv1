@@ -260,6 +260,23 @@ window.WeldclassToast = toast;
   if (/(?:^|;\s*)wc_portal=1/.test(document.cookie)) {
     $$('a[href="/login/"]').forEach(function (l) { var t = l.querySelector('.lbl') || l; if (/dealer login/i.test(t.textContent)) { t.textContent = 'Dealer portal'; l.setAttribute('href', '/dealer/'); } });
   }
+  // Signed-in trade customers with their own part numbers (e.g. Blackwoods): show their codes in place of ours.
+  var pnEls = $$('[data-pn]');
+  if (pnEls.length && /(?:^|;\s*)wc_portal=1/.test(document.cookie)) {
+    document.documentElement.classList.add('cpn-wait');
+    fetch('/api/portal/partnos/', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : { map: {} }; }).then(function (d) {
+      var map = d.map || {};
+      pnEls.forEach(function (el) {
+        var ours = el.getAttribute('data-pn'), theirs = map[ours.toUpperCase()];
+        if (!theirs) return;
+        el.textContent = theirs;
+        el.title = d.label ? d.label + ' part number' : 'Your part number';
+        el.classList.add('cpn');
+        var row = el.closest('[data-ptext]');
+        if (row) row.setAttribute('data-ptext', theirs.toLowerCase() + ' ' + row.getAttribute('data-ptext'));
+      });
+    }).catch(function () {}).then(function () { document.documentElement.classList.remove('cpn-wait'); });
+  }
   // Copy buttons (distributor portal: account manager's mobile and email).
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-copy]');
