@@ -136,20 +136,17 @@ function frame(s: Session, accts: Customer[], a: Account | null, tab: PortalTab,
   const place = a ? [a.city, a.state].filter(Boolean).join(' ') : '';
   const switcher =
     accts.length > 1
-      ? '<form method="post" action="/api/portal/switch/" class="pd-switch"><label for="pd-acct">Viewing</label><select id="pd-acct" name="c" onchange="this.form.submit()">' +
+      ? '<form method="post" action="/api/portal/switch/" class="pd-switch"><label for="pd-acct">Viewing account</label><select id="pd-acct" name="c" onchange="this.form.submit()">' +
         accts.map((c) => '<option value="' + c.id + '"' + (c.id === s.cur ? ' selected' : '') + '>' + esc(c.name) + ' (' + esc(c.number) + ')</option>').join('') +
         '</select><noscript><button type="submit">Switch</button></noscript></form>'
       : '';
   return (
     '<div class="pd">' +
-    '<div class="pd-top"><div class="wrap">' + (switcher || '<span>Signed in as ' + esc(s.e) + '</span>') +
-    '<div class="pd-me">' + (number ? '<span>' + esc(number) + '</span>' : '') + (switcher ? '<span class="pd-email">' + esc(s.e) + '</span>' : '') +
-    '<form method="post" action="/api/portal/logout/"><button type="submit">Sign out</button></form></div></div></div>' +
     '<div class="pd-nav"><div class="wrap"><span class="pd-brand">Distributor<br>portal</span><nav aria-label="Distributor portal">' +
     NAV.map(([k, label, href]) => '<a href="' + href + '"' + (k === tab ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') +
-    '</nav></div></div>' +
+    '</nav><div class="pd-me"><span class="pd-email">' + esc(s.e) + '</span><form method="post" action="/api/portal/logout/"><button type="submit">Sign out</button></form></div></div></div>' +
     '<header class="pd-hero"><div class="wrap"><div><div class="kick or">' + (tab === 'overview' ? 'Welcome back' : 'Distributor portal') + '</div><h1 class="disp">' + esc(name) + '<span class="dot">.</span></h1>' +
-    '<p>' + (number ? 'Account ' + esc(number) : '') + (place ? ' &middot; ' + esc(place) : '') + '</p></div>' +
+    '<p>' + (number ? 'Account ' + esc(number) : '') + (place ? ' &middot; ' + esc(place) : '') + '</p>' + switcher + '</div>' +
     '<div class="pd-hero-btns"><a class="btn btn-o" href="/">Shop the range</a>' + heroButtons + '</div></div></header>' +
     '<div class="pd-body"><div class="wrap">' +
     '<div class="note pd-ok" role="status" data-notice="welcome" hidden><span><b>Password saved.</b> You&rsquo;re logged in. Next time, log in with your email and this password.</span></div>' +

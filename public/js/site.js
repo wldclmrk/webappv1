@@ -256,6 +256,10 @@ window.WeldclassToast = toast;
   var qs = new URLSearchParams(location.search);
   var q = $('#q'); if (q && !q.value && qs.get('q') && location.pathname.indexOf('/search') === 0) q.value = qs.get('q');
   $$('[data-notice]').forEach(function (n) { if (qs.get(n.getAttribute('data-notice'))) n.hidden = false; });
+  // Signed-in dealers: the header's "Dealer login" link becomes "Dealer portal".
+  if (/(?:^|;\s*)wc_portal=1/.test(document.cookie)) {
+    $$('a[href="/login/"]').forEach(function (l) { var t = l.querySelector('.lbl') || l; if (/dealer login/i.test(t.textContent)) { t.textContent = 'Dealer portal'; l.setAttribute('href', '/dealer/'); } });
+  }
   // Copy buttons (distributor portal: account manager's mobile and email).
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-copy]');

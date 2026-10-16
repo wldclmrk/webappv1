@@ -40,21 +40,69 @@ export async function customers(ids: number[]): Promise<Customer[]> {
   return ids.map((id) => out.find((c) => c.id === id)).filter((c): c is Customer => Boolean(c));
 }
 
-const TXN_COLS =
-  "t.id, t.tranid, t.trandate, t.duedate, t.type, BUILTIN.DF(t.status) AS status, t.foreigntotal, t.foreignamountremaining, t.otherrefnum, CASE WHEN t.duedate < TRUNC(SYSDATE) AND t.foreignamountremaining > 0 THEN 'T' ELSE 'F' END AS overdue";
+/*
+ * Invoice columns. NetSuite accounts differ in which "amount remaining" and "due date" fields SuiteQL
+ * will return (an unsupported one fails the whole query with an "unexpected error"), so the first
+ * request tests each candidate once and the working ones are reused. Overdue is worked out here
+ * from the due date, not in SQL.
+ */
+let invCols: Promise<{ remaining: string | null; due: string | null }> | null = null;
+
+async function works(col: string): Promise<boolean> {
+  try {
+    await suiteql("SELECT t.id, " + col + " AS v FROM transaction t WHERE t.type = 'CustInvc' ORDER BY t.id DESC", 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function invoiceColumns() {
+  invCols ??= (async () => {
+    let remaining: string | null = null;
+    for (const c of ['t.foreignamountremaining', 't.foreignamountunpaid', 't.amountremaining', 't.amountunpaid']) {
+      if (await works(c)) { remaining = c; break; }
+    }
+    const due = (await works('t.duedate')) ? 't.duedate' : null;
+    return { remaining, due };
+  })().catch((e) => {
+    invCols = null;
+    throw e;
+  });
+  return invCols;
+}
+
+/** NetSuite status "A" is Open for both invoices and credit memos (it may arrive as "CustInvc:A"). */
+const OPEN = "(t.status = 'A' OR t.status LIKE '%:A')";
+
+function parseDate(d: string): number | null {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(d).trim());
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime() : null;
+}
 
 function toTxn(r: Record<string, string>): Txn {
+  const code = String(r.code ?? '').replace(/^.*:/, '');
+  const total = num(r.foreigntotal);
+  const remaining = r.remaining !== undefined ? num(r.remaining) : code === 'A' ? Math.abs(total) : 0;
+  const due = r.due ?? '';
+  const dueAt = parseDate(due);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   return {
-    id: Number(r.id), number: r.tranid ?? '', date: r.trandate ?? '', due: r.duedate ?? '', type: r.type ?? '', status: r.status ?? '',
-    total: num(r.foreigntotal), remaining: num(r.foreignamountremaining), po: r.otherrefnum ?? '', overdue: r.overdue === 'T',
+    id: Number(r.id), number: r.tranid ?? '', date: r.trandate ?? '', due, type: r.type ?? '', status: String(r.status ?? '').replace(/^.*?:\s*/, ''),
+    total, remaining, po: r.otherrefnum ?? '', overdue: r.type === 'CustInvc' && remaining > 0 && dueAt !== null && dueAt < today.getTime(),
   };
 }
 
-/** Invoices and credit memos, newest first. openOnly limits to items with an amount remaining. */
+/** Invoices and credit memos, newest first. openOnly limits to ones still open. */
 export async function invoices(customer: number, openOnly = false, max = 200): Promise<Txn[]> {
+  const c = await invoiceColumns();
+  const cols =
+    't.id, t.tranid, t.trandate, t.type, t.status AS code, BUILTIN.DF(t.status) AS status, t.foreigntotal, t.otherrefnum' +
+    (c.remaining ? ', ' + c.remaining + ' AS remaining' : '') + (c.due ? ', ' + c.due + ' AS due' : '');
   const rows = await suiteql<Record<string, string>>(
-    'SELECT ' + TXN_COLS + ' FROM transaction t WHERE t.entity = ' + sqlId(customer) + " AND t.type IN ('CustInvc', 'CustCred')" +
-      (openOnly ? ' AND t.foreignamountremaining > 0' : '') + ' ORDER BY t.trandate DESC, t.id DESC',
+    'SELECT ' + cols + ' FROM transaction t WHERE t.entity = ' + sqlId(customer) + " AND t.type IN ('CustInvc', 'CustCred')" +
+      (openOnly ? ' AND ' + OPEN : '') + ' ORDER BY t.trandate DESC, t.id DESC',
     max,
   );
   return rows.map(toTxn);
@@ -62,21 +110,18 @@ export async function invoices(customer: number, openOnly = false, max = 200): P
 
 export async function orders(customer: number, max = 100): Promise<Txn[]> {
   const rows = await suiteql<Record<string, string>>(
-    // Sales orders have no amount remaining or due date, so they use their own, smaller column set.
-    "SELECT t.id, t.tranid, t.trandate, t.type, BUILTIN.DF(t.status) AS status, t.foreigntotal, t.otherrefnum FROM transaction t WHERE t.entity = " + sqlId(customer) + " AND t.type = 'SalesOrd' ORDER BY t.trandate DESC, t.id DESC",
+    "SELECT t.id, t.tranid, t.trandate, t.type, t.status AS code, BUILTIN.DF(t.status) AS status, t.foreigntotal, t.otherrefnum FROM transaction t WHERE t.entity = " + sqlId(customer) + " AND t.type = 'SalesOrd' ORDER BY t.trandate DESC, t.id DESC",
     max,
   );
-  return rows.map(toTxn);
+  return rows.map((r) => ({ ...toTxn(r), remaining: 0, overdue: false }));
 }
 
+/** Balance owing and overdue, worked out from the open invoices themselves. */
 export async function summary(customer: number): Promise<Summary> {
-  const [r] = await suiteql<Record<string, string>>(
-    'SELECT SUM(t.foreignamountremaining) AS open, COUNT(*) AS opencount,' +
-      ' SUM(CASE WHEN t.duedate < TRUNC(SYSDATE) THEN t.foreignamountremaining ELSE 0 END) AS overdue,' +
-      ' SUM(CASE WHEN t.duedate < TRUNC(SYSDATE) THEN 1 ELSE 0 END) AS overduecount' +
-      ' FROM transaction t WHERE t.entity = ' + sqlId(customer) + " AND t.type = 'CustInvc' AND t.foreignamountremaining > 0",
-  );
-  return { open: num(r?.open), overdue: num(r?.overdue), openCount: num(r?.opencount), overdueCount: num(r?.overduecount) };
+  const open = (await invoices(customer, true, 1000)).filter((t) => t.type === 'CustInvc' && t.remaining > 0);
+  const late = open.filter((t) => t.overdue);
+  const sum = (l: Txn[]) => Math.round(l.reduce((a, t) => a + t.remaining, 0) * 100) / 100;
+  return { open: sum(open), overdue: sum(late), openCount: open.length, overdueCount: late.length };
 }
 
 /** True when the transaction belongs to this customer (checked before any PDF is rendered). */
