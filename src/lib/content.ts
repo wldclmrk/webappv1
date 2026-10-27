@@ -33,8 +33,8 @@ export type ProductRecord = {
   sku: string;
   description: string;
   short: string;
-  img: number;
-  gallery: number[];
+  img: number | string;
+  gallery: (number | string)[];
   brand: string;
   series: string;
   pulse: boolean;

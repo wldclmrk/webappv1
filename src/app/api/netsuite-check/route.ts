@@ -47,16 +47,17 @@ export async function GET(req: Request) {
   if (q.get('audit') === 'parts') {
     const r = netsuiteReport();
     if (!r) return Response.json({ ok: false, error: 'This build has no NetSuite snapshot. Check PRODUCT_SOURCE=netsuite is set for Preview, then redeploy, and look for "[netsuite]" in the build log.' });
-    const named = (ids: number[]) => ids.map((id) => ({ id, name: product(id)?.name ?? '', page: product(id)?.url ?? '' }));
+    const named = (ids: number[]) => ids.map((id) => ({ id, name: product(id)?.name ?? '', page: product(id)?.url ?? '', partNumbers: product(id)?.rec.part_numbers.length ?? 0 }));
     return Response.json(
       {
         ok: true,
         snapshotTaken: r.at,
         websiteItemsInNetSuite: r.items,
         productPages: r.products,
-        pagesUsingNetSuitePartNumbers: r.fromNetSuite.length,
-        pagesStillOnSiteContent: named(r.siteContentOnly),
+        productPagesBuiltFromNetSuite: named(r.fromNetSuite),
+        productPagesHiddenNoNetSuiteItems: r.siteContentOnly.length,
         netsuiteItemsNotOnAnyPage: r.unplaced,
+        fieldWarnings: r.warnings,
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );

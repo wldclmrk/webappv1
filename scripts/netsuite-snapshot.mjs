@@ -1,6 +1,6 @@
 /**
- * Build step: snapshot every website item from NetSuite into content/netsuite.json, which the site
- * reads for part number tables (part numbers, descriptions, RRPs, photos).
+ * Build step: snapshot every website item from NetSuite into content/netsuite.json. With a snapshot,
+ * product pages are built from NetSuite only (content, photos, part numbers, RRPs).
  *
  * Runs before `next build`. It only does anything when PRODUCT_SOURCE=netsuite and the NETSUITE_*
  * variables are set (the Preview environment for now). If NetSuite can't be reached the build
@@ -68,12 +68,30 @@ async function suiteql(tok, q) {
 try {
   const started = Date.now();
   const tok = await token();
-  const rows = await suiteql(
-    tok,
-    'SELECT id, itemid, displayname, itemtype, custitem_weldclass_grp_desc AS grpdesc, custitem_weldclass_grp_id AS grpid,' +
-      ' custitem_rrp_incl_gst AS rrp, custitem_web_show_rrp AS showrrp, custitem_itemimageurl AS img, custitem6 AS img2, custitem_weburl AS weburl,' +
-      " custitem_web_disallow_purchase AS nobuy FROM item WHERE custitemshowproductonweb = 'T' AND isinactive = 'F' ORDER BY itemid",
-  );
+  const BASE =
+    'id, itemid, displayname, itemtype, custitem_weldclass_grp_desc AS grpdesc, custitem_weldclass_grp_id AS grpid,' +
+    ' custitem_rrp_incl_gst AS rrp, custitem_web_show_rrp AS showrrp, custitem_itemimageurl AS img, custitem6 AS img2, custitem_weburl AS weburl,' +
+    ' custitem_web_disallow_purchase AS nobuy';
+  // Product content fields. Each is tested on its own, so one missing or restricted field only drops that field.
+  const CONTENT = {
+    primary: 'custitem_weldclass_primary_prd_flaf', title: 'custitem_productadtitle', shortHtml: 'custitem_weldclass_short_desc',
+    blurb: 'custitem_sales_blurb', features: 'custitem10', f1: 'custitem_sales_feature1', f2: 'custitem_sales_feature2', f3: 'custitem_sales_feature3',
+    downloads: 'custitem_wc_additional_downloads', seoTitle: 'custitem_weldclass_seo_title', seoDesc: 'custitem_weldclass_seo_desc',
+    disclaimer: 'custitem_weldclass_disclaimer', brand: 'BUILTIN.DF(custitem_weldclass_brand)', w7: 'custitem_wc_flag_7y_warranty', related: 'custitem_relatedproducts',
+  };
+  const WHERE = " FROM item WHERE custitemshowproductonweb = 'T' AND isinactive = 'F'";
+  const warnings = [];
+  const ok = [];
+  for (const [k, col] of Object.entries(CONTENT)) {
+    try {
+      await suiteql(tok, 'SELECT id, ' + col + ' AS ' + k.toLowerCase() + WHERE + ' ORDER BY id', 1);
+      ok.push([k, col]);
+    } catch (e) {
+      warnings.push('Field ' + col + ' could not be read, so it is left out: ' + e.message.slice(0, 160));
+    }
+  }
+  const rows = await suiteql(tok, 'SELECT ' + BASE + ok.map(([k, col]) => ', ' + col + ' AS ' + k.toLowerCase()).join('') + WHERE + ' ORDER BY itemid');
+  const text = (v) => (v == null ? '' : String(v));
   const items = rows.map((r) => ({
     id: Number(r.id),
     pn: String(r.itemid ?? '').trim(),
@@ -87,8 +105,24 @@ try {
     img2: r.img2 ?? '',
     weburl: r.weburl ?? '',
     noBuy: r.nobuy === 'T',
+    primary: text(r.primary).toUpperCase() === 'Y' || r.primary === 'T',
+    title: text(r.title),
+    shortHtml: text(r.shorthtml),
+    blurb: text(r.blurb),
+    features: text(r.features),
+    f1: text(r.f1),
+    f2: text(r.f2),
+    f3: text(r.f3),
+    downloads: text(r.downloads),
+    seoTitle: text(r.seotitle),
+    seoDesc: text(r.seodesc),
+    disclaimer: text(r.disclaimer),
+    brand: text(r.brand),
+    w7: r.w7 === 'T',
+    related: text(r.related),
   }));
-  writeFileSync(OUT, JSON.stringify({ at: new Date().toISOString(), account: env.NETSUITE_ACCOUNT_ID, items }));
+  writeFileSync(OUT, JSON.stringify({ at: new Date().toISOString(), account: env.NETSUITE_ACCOUNT_ID, warnings, items }));
+  for (const w of warnings) console.warn('[netsuite] ' + w);
   console.log('[netsuite] Snapshot of ' + items.length + ' website items saved in ' + ((Date.now() - started) / 1000).toFixed(1) + 's.');
 } catch (e) {
   console.warn('[netsuite] Could not reach NetSuite, building with the site content only: ' + e.message);

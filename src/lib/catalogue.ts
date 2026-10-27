@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { arr, categories, compares, products, site, str, type Faq, type Part, type ProductRecord, type Review, type TermRecord } from './content';
-import { money, txt } from './util';
+import { autoParagraphs, money, txt } from './util';
 
 /* ---------- Categories ---------- */
 
@@ -40,7 +40,7 @@ export function termUrl(t: Term): string {
 }
 /** Product IDs in a sub-category, in their featured order. */
 export function prodsIn(sub: Term | null): number[] {
-  return (sub?.items ?? []).map(Number);
+  return (sub?.items ?? []).map(Number).filter((id) => PRODUCTS.has(id));
 }
 /** Unique product IDs across a top category's subs, in order. */
 export function topItems(top: Term): number[] {
@@ -54,16 +54,23 @@ export function topOf(sub: Term | null): Term | null {
 
 /* ---------- Products ---------- */
 
-const PRODUCTS = new Map<number, ProductRecord>(products.map((p) => [Number(p.id), p]));
-const PRODUCT_BY_SLUG = new Map<string, ProductRecord>(products.map((p) => [p.slug, p]));
+/* The products the site shows: built from NetSuite when the build has a snapshot, otherwise the site content. */
+const SOURCE = buildSource();
+const PRODUCTS = new Map<number, ProductRecord>(SOURCE.list.map((p) => [Number(p.id), p]));
+const PRODUCT_BY_SLUG = new Map<string, ProductRecord>(SOURCE.list.map((p) => [p.slug, p]));
+
+/** Every product record the site shows, in content order. */
+export function productRecords(): ProductRecord[] {
+  return SOURCE.list;
+}
 
 export type P = {
   id: number;
   rec: ProductRecord;
   name: string;
   url: string;
-  img: number;
-  gallery: number[];
+  img: number | string;
+  gallery: (number | string)[];
   blurb: string;
   brand: string;
   series: string;
@@ -95,8 +102,8 @@ export function p(id: number | string): P | null {
     rec: r,
     name: r.name,
     url: r.path,
-    img: Number(r.img) || 0,
-    gallery: (r.gallery ?? []).map(Number),
+    img: typeof r.img === 'string' ? r.img : Number(r.img) || 0,
+    gallery: (r.gallery ?? []).map((g) => (typeof g === 'string' ? g : Number(g))),
     blurb: txt(r.short),
     brand: r.brand,
     series: r.series,
@@ -105,8 +112,8 @@ export function p(id: number | string): P | null {
     aka: str(r.meta.aka),
     rating: str(r.meta.rating),
     review_cnt: Number(r.meta.review_count) || 0,
-    prices: netsuite().prices.get(n) ?? (r.prices ?? []).map(Number),
-    from: netsuite().prices.has(n) ? (netsuite().prices.get(n)!.length ? Math.min(...netsuite().prices.get(n)!) : null) : r.from == null ? null : Number(r.from),
+    prices: (r.prices ?? []).map(Number),
+    from: r.from == null ? null : Number(r.from),
     menu_order: Number(r.menu_order) || 0,
     date: Math.floor(new Date(r.date).getTime() / 1000),
     pulse: /pulse/i.test(r.name),
@@ -122,122 +129,20 @@ export function productBySlug(slug: string): P | null {
 
 /** All product IDs, oldest first. */
 export function allProductIds(): number[] {
-  return products.map((x) => Number(x.id)).sort((a, b) => a - b);
+  return SOURCE.list.map((x) => Number(x.id)).sort((a, b) => a - b);
 }
 
-/** Part numbers: SKU, description, RRP and thumbnail per variation (from NetSuite when the build has a snapshot). */
+/** Part numbers: SKU, description, RRP and thumbnail per variation. */
 export function parts(id: number): Part[] {
-  const ns = netsuite().parts.get(id);
-  if (ns) return ns;
-  return (PRODUCTS.get(id)?.parts ?? []).map((x) => ({ ...x, img: Number(x.img) || 0 }));
+  return (PRODUCTS.get(id)?.parts ?? []).map((x) => ({ ...x, img: typeof x.img === 'string' ? x.img : Number(x.img) || 0 }));
 }
 export function partNumbers(id: number): string[] {
-  const ns = netsuite().parts.get(id);
-  return ns ? ns.map((q) => q.pn) : PRODUCTS.get(id)?.part_numbers ?? [];
-}
-
-/* ---------- NetSuite part numbers ---------- */
-
-type NsItem = { id: number; pn: string; name: string; type: string; desc: string; sort: string; rrp: number | null; showRrp: boolean; img: string; img2: string; weburl: string; noBuy: boolean };
-export type NsReport = { at: string; items: number; products: number; fromNetSuite: number[]; siteContentOnly: number[]; unplaced: { pn: string; name: string; weburl: string }[] };
-type NsData = { parts: Map<number, Part[]>; prices: Map<number, number[]>; report: NsReport | null };
-
-let NS: NsData | null = null;
-
-/**
- * Builds each product's part number table from the NetSuite snapshot. An item belongs to a product when
- * its part number is already on that product, or its web URL (custitem_weburl) points at that product:
- * either /product-group/<group id> or a short link the site redirects to the product (e.g. /MX250A).
- * Products with no matching NetSuite items keep their current part numbers, and are listed in the report.
- */
-function netsuite(): NsData {
-  if (NS) return NS;
-  NS = { parts: new Map(), prices: new Map(), report: null };
-  let snap: { at: string; items: NsItem[] } | null = null;
-  try {
-    const f = join(process.cwd(), 'content', 'netsuite.json');
-    if (existsSync(f)) snap = JSON.parse(readFileSync(f, 'utf8'));
-  } catch {
-    snap = null;
-  }
-  if (!snap?.items?.length) return NS;
-
-  const byPn = new Map<string, number[]>();
-  const order = new Map<number, Map<string, number>>();
-  const byGroup = new Map<string, number>();
-  const byPath = new Map<string, number>();
-  for (const r of products) {
-    const id = Number(r.id);
-    const o = new Map<string, number>();
-    (r.parts ?? []).forEach((q, i) => {
-      const k = q.pn.trim().toUpperCase();
-      o.set(k, i);
-      byPn.set(k, [...(byPn.get(k) ?? []), id]);
-    });
-    order.set(id, o);
-    const g = str(r.meta.group_id);
-    if (g) byGroup.set(g, id);
-    byPath.set(r.path, id);
-  }
-  const redirects = site.redirects as unknown as Record<string, [string, number]>;
-  const lowerRedirects = new Map(Object.entries(redirects).map(([k, v]) => [k.toLowerCase().replace(/\/$/, ''), v[0]]));
-  const targetOf = (weburl: string): number | null => {
-    const m = /\/product-group\/(\d+)/i.exec(weburl);
-    if (m && byGroup.has(m[1])) return byGroup.get(m[1])!;
-    const path = weburl.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0].toLowerCase().replace(/\/$/, '');
-    if (!path) return null;
-    const dest = lowerRedirects.get(path) ?? (byPath.has(path + '/') ? path + '/' : null);
-    return dest ? byPath.get(dest) ?? null : null;
-  };
-
-  const oldImg = new Map<string, number>();
-  for (const r of products) for (const q of r.parts ?? []) if (Number(q.img)) oldImg.set(q.pn.trim().toUpperCase(), Number(q.img));
-
-  const lists = new Map<number, NsItem[]>();
-  const unplaced: NsReport['unplaced'] = [];
-  for (const it of snap.items) {
-    const k = it.pn.toUpperCase();
-    const targets = new Set(byPn.get(k) ?? []);
-    const t = targetOf(it.weburl);
-    if (t) targets.add(t);
-    if (!targets.size) unplaced.push({ pn: it.pn, name: it.name, weburl: it.weburl });
-    for (const id of targets) lists.set(id, [...(lists.get(id) ?? []), it]);
-  }
-  for (const [id, list] of lists) {
-    const o = order.get(id)!;
-    list.sort((a, b) => {
-      const ia = o.get(a.pn.toUpperCase()), ib = o.get(b.pn.toUpperCase());
-      if (ia !== undefined && ib !== undefined) return ia - ib;
-      if (ia !== undefined) return -1;
-      if (ib !== undefined) return 1;
-      return (Number(a.sort) || 0) - (Number(b.sort) || 0) || a.pn.localeCompare(b.pn);
-    });
-    const prices: number[] = [];
-    NS.parts.set(
-      id,
-      list.map((it) => {
-        const show = it.showRrp && it.rrp !== null && it.rrp > 0;
-        if (show) prices.push(it.rrp!);
-        return { pn: it.pn, d: txt(it.desc) || txt(it.name), p: show ? money(it.rrp!) : '', img: it.img || oldImg.get(it.pn.toUpperCase()) || 0 };
-      }),
-    );
-    NS.prices.set(id, prices);
-  }
-  const ids = products.map((r) => Number(r.id));
-  NS.report = {
-    at: snap.at,
-    items: snap.items.length,
-    products: ids.length,
-    fromNetSuite: ids.filter((id) => NS!.parts.has(id)),
-    siteContentOnly: ids.filter((id) => !NS!.parts.has(id)),
-    unplaced,
-  };
-  return NS;
+  return PRODUCTS.get(id)?.part_numbers ?? [];
 }
 
 /** What the NetSuite snapshot covered, for the check page and build log. */
 export function netsuiteReport(): NsReport | null {
-  return netsuite().report;
+  return SOURCE.report;
 }
 
 /** 7-year warranty mention anywhere in the product copy. */
@@ -264,7 +169,7 @@ export function featuredIds(n = 4): number[] {
 }
 
 export function upsells(id: number): number[] {
-  return (PRODUCTS.get(id)?.upsells ?? []).map(Number);
+  return (PRODUCTS.get(id)?.upsells ?? []).map(Number).filter((x) => PRODUCTS.has(x));
 }
 
 export function productMeta(id: number) {
@@ -288,7 +193,7 @@ export function productMeta(id: number) {
 /* ---------- Comparisons ---------- */
 
 export function compareIds(c: { meta: Record<string, unknown> }): number[] {
-  return arr<number>(c.meta.ids).map(Number);
+  return arr<number>(c.meta.ids).map(Number).filter((id) => PRODUCTS.has(id));
 }
 
 export function comparesForProduct(pid: number) {
@@ -302,7 +207,7 @@ export function comparesForTerm(t: Term) {
 
 /* ---------- Search ---------- */
 
-type IdxRow = { n: string; hay: string; sh: string; u: string; i: number; s: string; f: string; d: number };
+type IdxRow = { n: string; hay: string; sh: string; u: string; i: number | string; s: string; f: string; d: number };
 let IDX: Map<number, IdxRow> | null = null;
 
 export function searchIndex(): Map<number, IdxRow> {
@@ -347,4 +252,186 @@ export function searchProducts(ql: string): number[] {
     });
   }
   return res;
+}
+
+/* ---------- NetSuite source ---------- */
+
+type NsItem = {
+  id: number; pn: string; name: string; type: string; desc: string; sort: string; rrp: number | null; showRrp: boolean; img: string; img2: string; weburl: string; noBuy: boolean;
+  primary?: boolean; title?: string; shortHtml?: string; blurb?: string; features?: string; f1?: string; f2?: string; f3?: string; downloads?: string;
+  seoTitle?: string; seoDesc?: string; disclaimer?: string; brand?: string; w7?: boolean; related?: string;
+};
+export type NsReport = { at: string; items: number; products: number; fromNetSuite: number[]; siteContentOnly: number[]; unplaced: { pn: string; name: string; weburl: string }[]; warnings: string[] };
+type Source = { list: ProductRecord[]; report: NsReport | null };
+
+function readSnapshot(): { at: string; items: NsItem[]; warnings?: string[] } | null {
+  try {
+    const f = join(process.cwd(), 'content', 'netsuite.json');
+    return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Links in a NetSuite HTML field ("<a href=...>label</a>") as [label, url] download rows. */
+function links(html: string): [string, string][] {
+  return [...String(html).matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)].map((m) => [txt(m[2]), m[1]] as [string, string]).filter((l) => l[0]);
+}
+
+/**
+ * NetSuite-only product records. A product page exists only when NetSuite has website items for it
+ * (custitemshowproductonweb ticked). An item belongs to a page when its part number is on that page,
+ * or its web URL (custitem_weburl) points at it: /product-group/<group id>, or a short link the site
+ * redirects to the product (e.g. /MX250A). All content comes from NetSuite; the only things kept from
+ * the site are the page address and which category the product sits in.
+ */
+function buildSource(): Source {
+  const snap = readSnapshot();
+  if (!snap?.items?.length) return { list: products, report: null };
+
+  const byPn = new Map<string, number[]>();
+  const order = new Map<number, Map<string, number>>();
+  const byGroup = new Map<string, number>();
+  const byPath = new Map<string, number>();
+  for (const r of products) {
+    const id = Number(r.id);
+    const o = new Map<string, number>();
+    (r.parts ?? []).forEach((q, i) => {
+      const k = q.pn.trim().toUpperCase();
+      o.set(k, i);
+      byPn.set(k, [...(byPn.get(k) ?? []), id]);
+    });
+    order.set(id, o);
+    const g = str(r.meta.group_id);
+    if (g) byGroup.set(g, id);
+    byPath.set(r.path, id);
+  }
+  const redirects = site.redirects as unknown as Record<string, [string, number]>;
+  const lowerRedirects = new Map(Object.entries(redirects).map(([k, v]) => [k.toLowerCase().replace(/\/$/, ''), v[0]]));
+  const targetOf = (weburl: string): number | null => {
+    const m = /\/product-group\/(\d+)/i.exec(weburl);
+    if (m && byGroup.has(m[1])) return byGroup.get(m[1])!;
+    const path = weburl.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0].toLowerCase().replace(/\/$/, '');
+    if (!path) return null;
+    const dest = lowerRedirects.get(path) ?? (byPath.has(path + '/') ? path + '/' : null);
+    return dest ? byPath.get(dest) ?? null : null;
+  };
+
+  const lists = new Map<number, NsItem[]>();
+  const unplaced: NsReport['unplaced'] = [];
+  for (const it of snap.items) {
+    const targets = new Set(byPn.get(it.pn.toUpperCase()) ?? []);
+    const t = targetOf(it.weburl);
+    if (t) targets.add(t);
+    if (!targets.size) unplaced.push({ pn: it.pn, name: it.name, weburl: it.weburl });
+    for (const id of targets) lists.set(id, [...(lists.get(id) ?? []), it]);
+  }
+
+  const build = (r: ProductRecord, items: NsItem[], o: Map<string, number>): ProductRecord => {
+    items.sort((a, b) => {
+      const ia = o.get(a.pn.toUpperCase()), ib = o.get(b.pn.toUpperCase());
+      if (ia !== undefined && ib !== undefined) return ia - ib;
+      if (ia !== undefined) return -1;
+      if (ib !== undefined) return 1;
+      return (Number(a.sort) || 0) - (Number(b.sort) || 0) || a.pn.localeCompare(b.pn);
+    });
+    const main = items.find((it) => it.primary) ?? items[0];
+    const prices: number[] = [];
+    const rows: Part[] = items.map((it) => {
+      const show = it.showRrp && it.rrp !== null && it.rrp > 0;
+      if (show) prices.push(it.rrp!);
+      return { pn: it.pn, d: txt(it.desc) || txt(it.name), p: show ? money(it.rrp!) : '', img: it.img || 0 };
+    });
+    const gallery = [...new Set([main.img, main.img2, ...items.map((it) => it.img)].filter(Boolean))].slice(0, 6) as string[];
+    const feats = [main.f1, main.f2, main.f3].filter((f): f is string => !!f && f.trim() !== '');
+    const more =
+      (main.features && txt(main.features) ? main.features : feats.length ? '<p><strong>KEY FEATURES:</strong></p><ul>' + feats.map((f) => '<li>' + f + '</li>').join('') + '</ul>' : '') +
+      (main.disclaimer ? '<p>*' + main.disclaimer.replace(/^\*+/, '') + '</p>' : '');
+    const name = txt(main.title) || txt(main.name) || main.pn;
+    return {
+      ...r,
+      name,
+      type: main.type,
+      sku: main.pn,
+      description: main.blurb ? autoParagraphs(main.blurb) : main.shortHtml ?? '',
+      short: main.shortHtml || main.blurb || '',
+      img: gallery[0] ?? 0,
+      gallery: gallery.slice(1),
+      brand: main.brand ?? '',
+      series: '',
+      pulse: /pulse/i.test(name),
+      prices,
+      from: prices.length ? Math.min(...prices) : null,
+      parts: rows,
+      part_numbers: rows.map((q) => q.pn),
+      upsells: [],
+      has7yw: items.some((it) => it.w7),
+      meta: {
+        group_id: r.meta.group_id,
+        related: main.related ?? '',
+        more,
+        downloads: links(main.downloads ?? ''),
+        meta_title: main.seoTitle ?? '',
+        meta_desc: main.seoDesc ?? '',
+      },
+    };
+  };
+
+  const list: ProductRecord[] = [];
+  for (const r of products) {
+    const items = lists.get(Number(r.id));
+    if (items?.length) list.push(build(r, items, order.get(Number(r.id))!));
+  }
+
+  // NetSuite items with no page on the site get new pages, one per web URL (or per item when it has none).
+  const groups = new Map<string, NsItem[]>();
+  for (const u of unplaced) {
+    const it = snap.items.find((x) => x.pn === u.pn)!;
+    const key = it.weburl ? it.weburl.replace(/^https?:\/\/[^/]+/i, '').toLowerCase().replace(/\/$/, '') : 'item:' + it.pn;
+    groups.set(key, [...(groups.get(key) ?? []), it]);
+  }
+  const slugs = new Set(products.map((r) => r.slug));
+  const created: number[] = [];
+  for (const items of groups.values()) {
+    const main = items.find((it) => it.primary) ?? items[0];
+    let slug = (txt(main.title) || txt(main.name) || main.pn).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'item-' + main.id;
+    for (let n = 2; slugs.has(slug); n++) slug = slug.replace(/-\d+$/, '') + '-' + n;
+    slugs.add(slug);
+    const id = 1_000_000 + main.id;
+    const base = {
+      id, slug, path: '/products/' + slug + '/', name: '', type: '', sku: '', description: '', short: '', img: 0, gallery: [], brand: '', series: '', pulse: false,
+      prices: [], from: null, parts: [], part_numbers: [], cats: [], primary_sub: 0, upsells: [], featured: false, menu_order: 0,
+      date: snap.at, modified: snap.at, has7yw: false, meta: {},
+    } as unknown as ProductRecord;
+    list.push(build(base, items, new Map()));
+    created.push(id);
+  }
+
+  // Related products: NetSuite "group IDs" (custitem_weldclass_grp_id, e.g. 141.52) -> page.
+  const byGrp = new Map<string, number>();
+  for (const r of list) for (const q of lists.get(Number(r.id)) ?? []) if (q.sort) byGrp.set(String(q.sort).trim(), Number(r.id));
+  for (const r of list) {
+    if (created.includes(Number(r.id))) for (const pn of r.part_numbers) {
+      const it = snap.items.find((x) => x.pn === pn);
+      if (it?.sort) byGrp.set(String(it.sort).trim(), Number(r.id));
+    }
+  }
+  for (const r of list) {
+    r.upsells = [...new Set(String(r.meta.related ?? '').split(',').map((x) => byGrp.get(x.trim())).filter((x): x is number => !!x && x !== Number(r.id)))];
+  }
+
+  const ids = products.map((r) => Number(r.id));
+  const shown = new Set(list.map((r) => Number(r.id)));
+  return {
+    list,
+    report: {
+      at: snap.at,
+      items: snap.items.length,
+      products: ids.length,
+      fromNetSuite: list.map((r) => Number(r.id)),
+      siteContentOnly: ids.filter((id) => !shown.has(id)),
+      unplaced: unplaced.filter((u) => !list.some((r) => r.part_numbers.includes(u.pn))),
+      warnings: snap.warnings ?? [],
+    },
+  };
 }

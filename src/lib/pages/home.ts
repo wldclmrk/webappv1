@@ -1,9 +1,8 @@
 /** Homepage. Copy comes from content/site.json ("mods"); featured products from the catalogue. */
-import { allProductIds, allTerms, featuredIds, p, productMeta, termUrl, topItems, topLabel, tops } from '../catalogue';
+import { allProductIds, allTerms, featuredIds, p, productMeta, termUrl, topItems, topLabel, tops, productRecords } from '../catalogue';
 import { latestPosts, pcard, postCard } from '../blocks';
 import { icon } from '../icons';
 import { asset, esc, escUrl, imgUrl, mod, modUrl, num1, pageUrl } from '../util';
-import { products } from '../content';
 
 function cat(slug: string): string {
   const t = allTerms().find((x) => x.slug === slug);
@@ -15,13 +14,13 @@ function cat(slug: string): string {
  * home review position, falling back to the four most-reviewed products.
  */
 function homeReviews(): string {
-  let ids = products
+  let ids = productRecords()
     .filter((r) => productMeta(Number(r.id)).homeReview !== null)
     .sort((a, b) => (productMeta(Number(a.id)).homeReview ?? 0) - (productMeta(Number(b.id)).homeReview ?? 0))
     .slice(0, 4)
     .map((r) => Number(r.id));
   if (!ids.length) {
-    ids = [...products].sort((a, b) => (Number(b.meta.review_count) || 0) - (Number(a.meta.review_count) || 0)).slice(0, 4).map((r) => Number(r.id));
+    ids = [...productRecords()].sort((a, b) => (Number(b.meta.review_count) || 0) - (Number(a.meta.review_count) || 0)).slice(0, 4).map((r) => Number(r.id));
   }
   const picks: [number, { n: string; s?: string; r: number; c: string }][] = [];
   for (const id of ids) {

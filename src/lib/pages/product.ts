@@ -161,7 +161,7 @@ export function productHtml(x: P): { html: string; curTop: number } {
     });
     o += '</div>';
   }
-  o += '</div><div class="buy"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span class="tag">' + esc(x.series) + '</span>' + (x.pulse ? '<span class="tag or">Pulse</span>' : '') + (x.aka ? '<span class="muted" style="font-size:14px">Also known as: ' + esc(x.aka) + '</span>' : '') + '</div>';
+  o += '</div><div class="buy"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' + (x.series ? '<span class="tag">' + esc(x.series) + '</span>' : '') + (x.pulse ? '<span class="tag or">Pulse</span>' : '') + (x.aka ? '<span class="muted" style="font-size:14px">Also known as: ' + esc(x.aka) + '</span>' : '') + '</div>';
   o += '<h1>' + esc(x.name) + '</h1>';
   if (x.rating) {
     o += '<button type="button" class="rating" data-tab="reviews"><b>' + esc(x.rating) + '<span style="font-size:13px;color:#B9BCE0">/10</span></b><span>Average rating' + (reviews.length ? ' &middot; <u style="color:var(--blue);font-weight:600">Read reviews</u>' : '') + '</span></button>';
