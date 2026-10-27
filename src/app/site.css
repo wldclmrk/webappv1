@@ -1,4 +1,4 @@
-/* Additions for the Next.js build (formerly WordPress-specific rules). */
+/* Site-wide additions: rich content, accessibility and layout helpers. */
 
 /* Skip link */
 a.sr:focus{position:fixed;left:16px;top:16px;width:auto;height:auto;clip:auto;z-index:100;background:var(--white);padding:10px 14px;border-radius:4px;box-shadow:0 10px 30px rgba(21,22,64,.25)}
@@ -15,16 +15,9 @@ a.chip[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);colo
 /* Editor content inside the Weldclass rich-text containers */
 .rich img{height:auto}
 .rich figure{margin:20px 0}
-.rich .wp-block-image img{border-radius:var(--r2)}
 .rich .aligncenter{margin-left:auto;margin-right:auto;text-align:center}
 .rich .alignleft{float:left;margin:4px 20px 12px 0}
 .rich .alignright{float:right;margin:4px 0 12px 20px}
-.rich .wp-block-buttons{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
-.rich .wp-block-button__link{display:inline-flex;align-items:center;min-height:46px;padding:0 22px;border-radius:4px;background:var(--orange);color:var(--navy);font-family:var(--f-display);font-weight:600;font-size:17px;letter-spacing:.08em;text-transform:uppercase}
-.rich .wp-block-table table{border-collapse:collapse;width:100%}
-.rich .wp-block-embed{margin:22px 0}
-.rich .wp-block-embed iframe{width:100%;aspect-ratio:16/9;height:auto;border:0;border-radius:var(--r2)}
-.rich .wp-block-quote{margin:0 0 20px;padding:4px 0 4px 20px;border-left:4px solid var(--orange);font-family:var(--f-display);text-transform:uppercase;color:var(--blue);font-size:21px;line-height:1.25}
 
 
 /* Where to buy: store cards are buttons in the results list */

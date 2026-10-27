@@ -113,7 +113,7 @@ export function stripMedia(html: string): string {
     .replace(/<figure[\s\S]*?<\/figure>/gi, '')
     .replace(/<picture[\s\S]*?<\/picture>/gi, '')
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<div[^>]*class="[^"]*wp-caption[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*class="[^"]*caption[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
     .replace(/<img\b[^>]*>/gi, '')
     .replace(/<a\b[^>]*>\s*<\/a>/gi, '')
     .replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, '');

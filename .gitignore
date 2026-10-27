@@ -12,3 +12,8 @@ out/
 next-env.d.ts
 .vercel
 
+# transfer leftovers (safe to delete)
+media-transfer.tar
+
+# NetSuite snapshot, rebuilt on every deploy
+content/netsuite.json

@@ -1,10 +1,12 @@
 /**
  * Catalogue data layer: categories, products, part numbers and search.
  *
- * This is the seam for NetSuite. Pages only use the functions exported here, so product data can
- * later come from NetSuite (at build time, or with incremental revalidation) by changing this file
- * and ./content.ts, without touching the page templates.
+ * This is the seam for NetSuite. Pages only use the functions exported here. When the build has a
+ * NetSuite snapshot (content/netsuite.json, written by scripts/netsuite-snapshot.mjs), part number
+ * tables come from NetSuite; otherwise from the site content.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { arr, categories, compares, products, site, str, type Faq, type Part, type ProductRecord, type Review, type TermRecord } from './content';
 import { money, txt } from './util';
 
@@ -103,8 +105,8 @@ export function p(id: number | string): P | null {
     aka: str(r.meta.aka),
     rating: str(r.meta.rating),
     review_cnt: Number(r.meta.review_count) || 0,
-    prices: (r.prices ?? []).map(Number),
-    from: r.from == null ? null : Number(r.from),
+    prices: netsuite().prices.get(n) ?? (r.prices ?? []).map(Number),
+    from: netsuite().prices.has(n) ? (netsuite().prices.get(n)!.length ? Math.min(...netsuite().prices.get(n)!) : null) : r.from == null ? null : Number(r.from),
     menu_order: Number(r.menu_order) || 0,
     date: Math.floor(new Date(r.date).getTime() / 1000),
     pulse: /pulse/i.test(r.name),
@@ -123,12 +125,119 @@ export function allProductIds(): number[] {
   return products.map((x) => Number(x.id)).sort((a, b) => a - b);
 }
 
-/** Part numbers: SKU, description, RRP and thumbnail per variation. */
+/** Part numbers: SKU, description, RRP and thumbnail per variation (from NetSuite when the build has a snapshot). */
 export function parts(id: number): Part[] {
+  const ns = netsuite().parts.get(id);
+  if (ns) return ns;
   return (PRODUCTS.get(id)?.parts ?? []).map((x) => ({ ...x, img: Number(x.img) || 0 }));
 }
 export function partNumbers(id: number): string[] {
-  return PRODUCTS.get(id)?.part_numbers ?? [];
+  const ns = netsuite().parts.get(id);
+  return ns ? ns.map((q) => q.pn) : PRODUCTS.get(id)?.part_numbers ?? [];
+}
+
+/* ---------- NetSuite part numbers ---------- */
+
+type NsItem = { id: number; pn: string; name: string; type: string; desc: string; sort: string; rrp: number | null; showRrp: boolean; img: string; img2: string; weburl: string; noBuy: boolean };
+export type NsReport = { at: string; items: number; products: number; fromNetSuite: number[]; siteContentOnly: number[]; unplaced: { pn: string; name: string; weburl: string }[] };
+type NsData = { parts: Map<number, Part[]>; prices: Map<number, number[]>; report: NsReport | null };
+
+let NS: NsData | null = null;
+
+/**
+ * Builds each product's part number table from the NetSuite snapshot. An item belongs to a product when
+ * its part number is already on that product, or its web URL (custitem_weburl) points at that product:
+ * either /product-group/<group id> or a short link the site redirects to the product (e.g. /MX250A).
+ * Products with no matching NetSuite items keep their current part numbers, and are listed in the report.
+ */
+function netsuite(): NsData {
+  if (NS) return NS;
+  NS = { parts: new Map(), prices: new Map(), report: null };
+  let snap: { at: string; items: NsItem[] } | null = null;
+  try {
+    const f = join(process.cwd(), 'content', 'netsuite.json');
+    if (existsSync(f)) snap = JSON.parse(readFileSync(f, 'utf8'));
+  } catch {
+    snap = null;
+  }
+  if (!snap?.items?.length) return NS;
+
+  const byPn = new Map<string, number[]>();
+  const order = new Map<number, Map<string, number>>();
+  const byGroup = new Map<string, number>();
+  const byPath = new Map<string, number>();
+  for (const r of products) {
+    const id = Number(r.id);
+    const o = new Map<string, number>();
+    (r.parts ?? []).forEach((q, i) => {
+      const k = q.pn.trim().toUpperCase();
+      o.set(k, i);
+      byPn.set(k, [...(byPn.get(k) ?? []), id]);
+    });
+    order.set(id, o);
+    const g = str(r.meta.group_id);
+    if (g) byGroup.set(g, id);
+    byPath.set(r.path, id);
+  }
+  const redirects = site.redirects as unknown as Record<string, [string, number]>;
+  const lowerRedirects = new Map(Object.entries(redirects).map(([k, v]) => [k.toLowerCase().replace(/\/$/, ''), v[0]]));
+  const targetOf = (weburl: string): number | null => {
+    const m = /\/product-group\/(\d+)/i.exec(weburl);
+    if (m && byGroup.has(m[1])) return byGroup.get(m[1])!;
+    const path = weburl.replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0].toLowerCase().replace(/\/$/, '');
+    if (!path) return null;
+    const dest = lowerRedirects.get(path) ?? (byPath.has(path + '/') ? path + '/' : null);
+    return dest ? byPath.get(dest) ?? null : null;
+  };
+
+  const oldImg = new Map<string, number>();
+  for (const r of products) for (const q of r.parts ?? []) if (Number(q.img)) oldImg.set(q.pn.trim().toUpperCase(), Number(q.img));
+
+  const lists = new Map<number, NsItem[]>();
+  const unplaced: NsReport['unplaced'] = [];
+  for (const it of snap.items) {
+    const k = it.pn.toUpperCase();
+    const targets = new Set(byPn.get(k) ?? []);
+    const t = targetOf(it.weburl);
+    if (t) targets.add(t);
+    if (!targets.size) unplaced.push({ pn: it.pn, name: it.name, weburl: it.weburl });
+    for (const id of targets) lists.set(id, [...(lists.get(id) ?? []), it]);
+  }
+  for (const [id, list] of lists) {
+    const o = order.get(id)!;
+    list.sort((a, b) => {
+      const ia = o.get(a.pn.toUpperCase()), ib = o.get(b.pn.toUpperCase());
+      if (ia !== undefined && ib !== undefined) return ia - ib;
+      if (ia !== undefined) return -1;
+      if (ib !== undefined) return 1;
+      return (Number(a.sort) || 0) - (Number(b.sort) || 0) || a.pn.localeCompare(b.pn);
+    });
+    const prices: number[] = [];
+    NS.parts.set(
+      id,
+      list.map((it) => {
+        const show = it.showRrp && it.rrp !== null && it.rrp > 0;
+        if (show) prices.push(it.rrp!);
+        return { pn: it.pn, d: txt(it.desc) || txt(it.name), p: show ? money(it.rrp!) : '', img: it.img || oldImg.get(it.pn.toUpperCase()) || 0 };
+      }),
+    );
+    NS.prices.set(id, prices);
+  }
+  const ids = products.map((r) => Number(r.id));
+  NS.report = {
+    at: snap.at,
+    items: snap.items.length,
+    products: ids.length,
+    fromNetSuite: ids.filter((id) => NS!.parts.has(id)),
+    siteContentOnly: ids.filter((id) => !NS!.parts.has(id)),
+    unplaced,
+  };
+  return NS;
+}
+
+/** What the NetSuite snapshot covered, for the check page and build log. */
+export function netsuiteReport(): NsReport | null {
+  return netsuite().report;
 }
 
 /** 7-year warranty mention anywhere in the product copy. */

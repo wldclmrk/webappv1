@@ -191,7 +191,7 @@ export function blogHtml(): string {
 export function handyToolsHtml(): string {
   const pg = pageByKey('handy-tools');
   const byLegacy = (id: number) => {
-    const po = posts.find((x) => str(x.meta.legacy_id) === String(id));
+    const po = posts.find((x) => str(x.meta.old_site_id) === String(id));
     return po ? po.path : 'https://www.weldclass.com.au/blog/' + id;
   };
   const cat = (slug: string) => {

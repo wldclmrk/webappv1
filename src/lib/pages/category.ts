@@ -87,7 +87,7 @@ export function categoryHtml(t: Term): { html: string; curTop: number } {
     const h1 = t.h1 ? t.h1 : t.name;
     const introMeta = String(t.meta.intro ?? '');
     const intro = introMeta ? esc(introMeta) : trimWordsAt(txt(t.desc), 380, 360);
-    const seoh1 = String(t.meta.legacy_h1 ?? '');
+    const seoh1 = String(t.meta.seo_h1 ?? '');
     const kick = seoh1 && seoh1 !== t.name ? seoh1.split('|')[0].trim() : topLabel(top);
 
     o += band(top.band, crumbs([home, [topLabel(top), termUrl(top)], [t.name, '']]), esc(kick), esc(h1), intro);

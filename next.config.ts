@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 import site from './content/site.json';
 
-/** Legacy weldclass.com.au URLs (and old WordPress paths) redirected to their new pages. */
+/** Old weldclass.com.au URLs redirected to their new pages, so links and search rankings carry over. */
 const legacy = Object.entries(site.redirects as unknown as Record<string, [string, number]>).map(([source, [destination, code]]) => ({
   source: source.replace(/[()?+*:]/g, (c) => '\\' + c),
   destination,
@@ -12,6 +12,8 @@ const config: NextConfig = {
   // Keep the trailing-slash URLs the site has always used (/products/fury-165.../).
   trailingSlash: true,
   poweredByHeader: false,
+  // The NetSuite snapshot is read from disk, so ship it with the server functions too.
+  outputFileTracingIncludes: { '/**': ['./content/netsuite.json'] },
   async redirects() {
     return [
       { source: '/shop', destination: '/search/', permanent: false },

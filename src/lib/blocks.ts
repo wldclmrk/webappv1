@@ -5,7 +5,7 @@
 import { arr, posts, str, type Faq, type PostRecord, type Stockist } from './content';
 import { comparesForTerm, p, prodsIn, subs, termUrl, topLabel, tops, type Term } from './catalogue';
 import { icon, POST_ICONS } from './icons';
-import { asset, esc, escUrl, fmtDate, img, imgUrl, mod, money, num1, pageUrl, wpautopIfPlain, wrapTables } from './util';
+import { asset, esc, escUrl, fmtDate, img, imgUrl, mod, money, num1, pageUrl, paragraphsIfPlain, wrapTables } from './util';
 
 export type Crumb = [string, string];
 
@@ -157,7 +157,7 @@ export function pcard(id: number, attr = ''): string {
     : '<small>Pricing</small><span style="font-size:15px">Ask a distributor</span>';
   const rate = x.rating && x.review_cnt >= 3 ? '<div class="prate"><b>' + num1(x.rating) + '</b>/10 <span>&middot; ' + x.review_cnt + ' reviews</span></div>' : '';
   return (
-    '<article class="card hov pc"' + attr + ' data-series="' + esc(x.series) + '" data-name="' + esc(x.name.toLowerCase()) + '" data-price="' + esc(fp ? String(fp) : '') + '"><a class="pimg zoom" href="' + escUrl(x.url) + '">' + img(x.img, x.name, '', 'woocommerce_thumbnail') +
+    '<article class="card hov pc"' + attr + ' data-series="' + esc(x.series) + '" data-name="' + esc(x.name.toLowerCase()) + '" data-price="' + esc(fp ? String(fp) : '') + '"><a class="pimg zoom" href="' + escUrl(x.url) + '">' + img(x.img, x.name, '', 'card') +
     '<span class="tags"><span class="tag">' + esc(x.series) + '</span>' + (x.pulse ? '<span class="tag or">Pulse</span>' : '') + '</span></a>' +
     '<div class="pbody"><a class="pname" href="' + escUrl(x.url) + '">' + esc(x.name) + '</a>' + rate + '<div class="pblurb">' + esc(x.summary ? x.summary : x.blurb) + '</div>' +
     '<div class="pfoot"><div class="price">' + price + '</div><a class="arrow" href="' + escUrl(x.url) + '" style="font-weight:600;font-size:14px">View</a></div></div></article>'
@@ -199,7 +199,7 @@ export function catGuide(t: Term): string {
   const faq = arr<Faq>(t.meta.faq);
   const cmps = comparesForTerm(t);
   if (!guide && !faq.length && !cmps.length) return '';
-  let h = '<section class="cguide">' + (guide ? '<div class="rich art">' + wrapTables(wpautopIfPlain(guide)) + '</div>' : '');
+  let h = '<section class="cguide">' + (guide ? '<div class="rich art">' + wrapTables(paragraphsIfPlain(guide)) + '</div>' : '');
   h += faqHtml(faq, esc((t.h1 ? t.h1 : t.name) + ' FAQs'));
   if (cmps.length) {
     h += '<div class="cmpstrip"><b>Compare models:</b> ';

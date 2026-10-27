@@ -78,7 +78,7 @@ export function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' });
 }
 
-/* ---------- Site copy (formerly the WordPress Customiser) ---------- */
+/* ---------- Site copy (content/site.json) ---------- */
 
 export function mod(key: string): string {
   return site.mods[key] ?? '';
@@ -124,8 +124,9 @@ const SIZE_FALLBACK: Record<string, string[]> = {
   medium: ['medium'],
   medium_large: ['medium_large', 'large'],
   large: ['large'],
-  woocommerce_thumbnail: ['woocommerce_thumbnail'],
-  woocommerce_single: ['woocommerce_single'],
+  card: ['card'],
+  single: ['single'],
+  gallery_thumb: ['gallery_thumb'],
   full: [],
 };
 
@@ -148,7 +149,7 @@ export function imgUrl(val: unknown, size = 'large'): string {
   return '';
 }
 
-/** srcset of same-proportion sizes, like WordPress. */
+/** srcset from the same-proportion sizes of an image. */
 function srcset(id: number, size: string): string {
   const m = media[String(id)];
   if (!m) return '';
@@ -185,8 +186,8 @@ export function wrapTables(html: string): string {
   return String(html).replace(/<table/gi, '<div class="tbl"><table').replace(/<\/table>/gi, '</table></div>');
 }
 
-/** Minimal port of WordPress wpautop(): blank lines become paragraphs, single newlines <br>. */
-export function wpautop(text: string): string {
+/** Plain text to HTML: blank lines become paragraphs, single newlines <br>. */
+export function autoParagraphs(text: string): string {
   let t = String(text ?? '');
   if (!t.trim()) return '';
   t = t.replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '\n\n');
@@ -207,7 +208,7 @@ export function wpautop(text: string): string {
   return t;
 }
 
-/** Run wpautop only on content without block-level markup. */
-export function wpautopIfPlain(html: string): string {
-  return /<(p|h[1-6]|ul|ol|table|div)\b/i.test(html) ? html : wpautop(html);
+/** Run autoParagraphs only on content without block-level markup. */
+export function paragraphsIfPlain(html: string): string {
+  return /<(p|h[1-6]|ul|ol|table|div)\b/i.test(html) ? html : autoParagraphs(html);
 }

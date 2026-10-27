@@ -4,7 +4,7 @@ import { crumbbar, faqHtml, pcard, type Crumb } from '../blocks';
 import { detailsPanel } from '../details';
 import { icon } from '../icons';
 import { crumbLd, faqLd, seo, type Seo } from '../seo';
-import { abs, asset, clip, esc, escUrl, img, imgUrl, mod, money, pageUrl, txt, wpautopIfPlain } from '../util';
+import { abs, asset, clip, esc, escUrl, img, imgUrl, mod, money, pageUrl, txt, paragraphsIfPlain } from '../util';
 
 function data(x: P) {
   const id = x.id;
@@ -80,7 +80,7 @@ export function productHtml(x: P): { html: string; curTop: number } {
   let rel = upsells(id).filter((r) => !!p(r)).slice(0, 8);
   if (!rel.length && sub) rel = prodsIn(sub).filter((r) => r !== id).slice(0, 4);
   const descRaw = x.rec.description;
-  const desc = descRaw.trim() !== '' ? wpautopIfPlain(descRaw) : '<p>' + esc(x.blurb) + '</p>';
+  const desc = descRaw.trim() !== '' ? paragraphsIfPlain(descRaw) : '<p>' + esc(x.blurb) + '</p>';
   const has7 = has7yw(id);
   const fp = x.from;
   const many = x.prices.length > 1;
@@ -153,11 +153,11 @@ export function productHtml(x: P): { html: string; curTop: number } {
   cr.push([x.name, '']);
   let o = crumbbar(cr);
 
-  o += '<section class="sec tight"><div class="wrap pp-top"><div class="gal" data-gallery><div class="mainimg">' + img(gal[0] ?? x.img, x.name, ' data-main fetchpriority="high"', 'woocommerce_single') + (has7 ? '<img class="wb" src="' + asset('badge-7yw-orange.png') + '" alt="7 Year Warranty offer">' : '') + '</div>';
+  o += '<section class="sec tight"><div class="wrap pp-top"><div class="gal" data-gallery><div class="mainimg">' + img(gal[0] ?? x.img, x.name, ' data-main fetchpriority="high"', 'single') + (has7 ? '<img class="wb" src="' + asset('badge-7yw-orange.png') + '" alt="7 Year Warranty offer">' : '') + '</div>';
   if (gal.length > 1) {
     o += '<div class="thumbs" role="group" aria-label="Product images">';
     gal.forEach((g, i) => {
-      o += '<button type="button" data-thumb="' + i + '" data-full="' + escUrl(imgUrl(g, 'woocommerce_single')) + '" aria-label="Show image ' + (i + 1) + '" aria-pressed="' + (i === 0 ? 'true' : 'false') + '">' + img(g, x.name + ' image ' + (i + 1), '', 'thumbnail') + '</button>';
+      o += '<button type="button" data-thumb="' + i + '" data-full="' + escUrl(imgUrl(g, 'single')) + '" aria-label="Show image ' + (i + 1) + '" aria-pressed="' + (i === 0 ? 'true' : 'false') + '">' + img(g, x.name + ' image ' + (i + 1), '', 'thumbnail') + '</button>';
     });
     o += '</div>';
   }

@@ -1,5 +1,5 @@
 /**
- * Raw content, exported once from the old WordPress site into /content/*.json.
+ * Site content, stored as JSON in /content/*.json.
  *
  * Products and categories are read through ./catalogue.ts, which is the only place that should
  * change when product data moves to NetSuite. Everything else (articles, pages, stockists,
@@ -21,7 +21,8 @@ export type Review = { n: string; s?: string; r: number; d?: string; c: string }
 export type MediaSize = [string, number, number];
 export type Media = { f: string; w: number; h: number; alt: string; s: Record<string, MediaSize> };
 
-export type Part = { pn: string; d: string; p: string; img: number };
+/** One part number row. img is a media ID from the site's own images, or a full image URL (from NetSuite). */
+export type Part = { pn: string; d: string; p: string; img: number | string };
 
 export type ProductRecord = {
   id: number;
@@ -92,7 +93,7 @@ export type TermRecord = {
     intro?: string;
     guide?: string;
     faq?: Faq[] | string;
-    legacy_h1?: string;
+    seo_h1?: string;
     meta_title?: string;
     meta_desc?: string;
     [k: string]: unknown;

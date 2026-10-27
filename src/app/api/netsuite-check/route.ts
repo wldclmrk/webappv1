@@ -1,3 +1,4 @@
+import { netsuiteReport, p as product } from '@/lib/catalogue';
 import { products } from '@/lib/content';
 import { NetSuiteError, accessToken, netsuiteConfigured, productSource, sqlStr, suiteql } from '@/lib/netsuite';
 
@@ -41,6 +42,25 @@ export async function GET(req: Request) {
   // Image audit: /api/netsuite-check/?audit=images (add &format=csv for a spreadsheet)
   const q = new URL(req.url).searchParams;
   if (q.get('audit') === 'images') return imageAudit(q.get('format') === 'csv');
+
+  // Part numbers coverage: /api/netsuite-check/?audit=parts (what this build took from NetSuite)
+  if (q.get('audit') === 'parts') {
+    const r = netsuiteReport();
+    if (!r) return Response.json({ ok: false, error: 'This build has no NetSuite snapshot. Check PRODUCT_SOURCE=netsuite is set for Preview, then redeploy, and look for "[netsuite]" in the build log.' });
+    const named = (ids: number[]) => ids.map((id) => ({ id, name: product(id)?.name ?? '', page: product(id)?.url ?? '' }));
+    return Response.json(
+      {
+        ok: true,
+        snapshotTaken: r.at,
+        websiteItemsInNetSuite: r.items,
+        productPages: r.products,
+        pagesUsingNetSuitePartNumbers: r.fromNetSuite.length,
+        pagesStillOnSiteContent: named(r.siteContentOnly),
+        netsuiteItemsNotOnAnyPage: r.unplaced,
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 
   // Transaction check: /api/netsuite-check/?audit=txn&customer=C09120 (tests each portal column on its own)
   if (q.get('audit') === 'txn') {

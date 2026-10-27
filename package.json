@@ -5,13 +5,14 @@
   "description": "Weldclass website (Version A design) built with Next.js for Vercel.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/netsuite-snapshot.mjs && next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "netsuite:snapshot": "node scripts/netsuite-snapshot.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "parse5": "8.0.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
